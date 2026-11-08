@@ -5,8 +5,8 @@
   "description": "Gaming-style customer order and manually verified GCash payment portal",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "setup-admin": "node create-admin.js"
+  "start": "node --max-old-space-size=512 server.js"
+}
   },
   "engines": {
     "node": ">=20"
