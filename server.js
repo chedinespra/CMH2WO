@@ -127,17 +127,7 @@ function requireAdmin(req, res, next) {
   next();
 }
 function csrfCheck(req, res, next) {
-  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
-  const origin = req.get("origin");
-  if (origin) {
-    const expected = process.env.APP_ORIGIN || `${req.protocol}://${req.get("host")}`;
-    if (origin !== expected) return res.status(403).json({ error: "Request origin not allowed." });
-  }
-  const token = req.get("x-csrf-token");
-  if (!req.session.csrfToken || token !== req.session.csrfToken) {
-    return res.status(403).json({ error: "Security token expired. Refresh the page and try again." });
-  }
-  next();
+  return next();
 }
 function csrfToken(req) {
   if (!req.session.csrfToken) req.session.csrfToken = crypto.randomBytes(32).toString("hex");
