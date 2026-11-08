@@ -27,7 +27,6 @@ if (process.env.NODE_ENV === "production" && !process.env.APP_ORIGIN) {
   console.error("Set APP_ORIGIN in production (for example https://your-domain.com).");
   process.exit(1);
 }
-
 const db = new Database(path.join(DATA_DIR, "site.sqlite"));
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
