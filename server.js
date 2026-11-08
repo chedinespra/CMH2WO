@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const session = require("express-session");
 const SQLiteStore = require("connect-sqlite3")(session);
+const Database = require("better-sqlite3");
 const bcrypt = require("bcryptjs");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
