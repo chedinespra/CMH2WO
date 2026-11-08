@@ -14,12 +14,11 @@
 
 <div class="ambient"></div>
 
-<!-- TOPBAR NGA NAA NAY IMONG LOGO -->
+<!-- TOPBAR NGA NAA NAY LOGO -->
 <header class="topbar">
   <a class="brand" href="/" style="display: flex; align-items: center; gap: 10px; text-decoration: none;">
-    <!-- Dinhi nimo gibutang ang imahe isip logo (ilisan ang 'logo.jpg' kung unsa man ang exact filename sa imong gi-upload) -->
-    <img src="/logo.png" alt="H2WO Logo" style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 1.5px solid #ff1a1a; box-shadow: 0 0 8px rgba(255, 26, 26, 0.5);">
-    <span id="brandName" style="color: #fff; font-weight: bold; font-family: 'Arial Black', sans-serif; letter-spacing: 1px;">H2WO STORE</span>
+    <img src="/logo.jpg" alt="H2WO Logo" style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 1.5px solid #ff1a1a; box-shadow: 0 0 8px rgba(255, 26, 26, 0.5);">
+    <span id="brandName" style="color: #fff; font-weight: bold; font-family: 'Arial Black', sans-serif; letter-spacing: 1px;">CMH2WO</span>
   </a>
   <span class="secure-label">SECURE ORDER PORTAL</span>
 </header>
@@ -27,7 +26,8 @@
 <main class="shell">
 <section class="hero">
   <div class="eyebrow"><span class="pulse"></span> PREMIUM ACCESS PORTAL</div>
-  <h1>DOMINATE THE GAME<br><span>TODAY.</span></h1>
+  <!-- GI-AYOS ANG SIZE ARON DILI MAG-PATONG UG MAGKA-ATBANG -->
+  <h1 style="font-size: clamp(1.8rem, 5vw, 2.8rem); line-height: 1.2; letter-spacing: -1px;">DOMINATE THE <span style="color: #ff1a1a;">GAME TODAY.</span></h1>
   <p>Enter your player details, choose a plan, and complete your payment securely.</p>
 </section>
 
@@ -52,7 +52,7 @@
     </svg>
     MESSAGE ON TELEGRAM (@CMH2WO)
   </a>
-</div>
+  <div class="summary" id="summary"></div>
 <div class="qr-wrap"><div class="qr-frame" id="qrFrame"><div class="qr-empty">GCash QR code has not been uploaded yet.<br>Contact the administrator.</div></div><div><h3>SCAN TO PAY VIA GCASH</h3><p class="muted">Open GCash and scan this QR code. Pay the exact amount shown above.</p><a class="btn secondary" id="downloadQr" href="#" download="gcash-qr.png">↓ DOWNLOAD QR IMAGE</a></div></div>
 <form id="proofForm" enctype="multipart/form-data">
 <label for="reference">GCASH REFERENCE NUMBER <span class="optional">(OPTIONAL)</span></label><input id="reference" name="referenceNumber" maxlength="80" placeholder="Enter reference number">
@@ -75,4 +75,4 @@
 <div id="toast" role="status" aria-live="polite"></div>
 <script src="/app.js" defer></script>
 </body></html>
-<div class="summary" id="summary"></div>
+</div>
