@@ -62,6 +62,32 @@
 <div id="successMessage" class="success hidden"></div>
 </section>
 
+<section class="panel hidden" id="statusPanel">
+  <div class="status-box hidden" id="statusPending">
+    <div class="status-icon pending">…</div>
+    <h2>Payment Submitted</h2>
+    <p class="muted">Your payment proof was received and is waiting for admin verification. This page updates automatically once your payment is confirmed. You can also message the admin to speed things up.</p>
+    <p class="muted">Transaction ID<br><strong class="txid" id="pendingTx"></strong></p>
+    <a class="btn secondary block contact-admin hidden" target="_blank" rel="noopener noreferrer">MESSAGE ADMIN ON TELEGRAM</a>
+  </div>
+  <div class="status-box hidden" id="statusSuccess">
+    <div class="status-icon ok">✓</div>
+    <h2>Payment Successful</h2>
+    <p class="muted">Your payment has been verified. Please download your receipt and send it to the admin for verification and approval of your order.</p>
+    <canvas id="receiptCanvas" class="receipt-preview" aria-label="Payment receipt preview"></canvas>
+    <button class="btn primary block" id="downloadReceipt" type="button">↓ DOWNLOAD RECEIPT</button>
+    <a class="btn tg block contact-admin hidden" id="contactAdmin" target="_blank" rel="noopener noreferrer">CONTACT ADMIN – SEND YOUR RECEIPT</a>
+  </div>
+  <div class="status-box hidden" id="statusRejected">
+    <div class="status-icon bad">✕</div>
+    <h2>Payment Not Verified</h2>
+    <p class="muted">The admin could not verify this payment. Please contact the admin with your payment details.</p>
+    <p class="muted">Transaction ID<br><strong class="txid" id="rejectedTx"></strong></p>
+    <a class="btn tg block contact-admin hidden" target="_blank" rel="noopener noreferrer">CONTACT ADMIN</a>
+  </div>
+  <div style="text-align:center;margin-top:16px"><button class="text-button" id="newOrder" type="button">START A NEW ORDER</button></div>
+</section>
+
 <footer>
   <span>© <span id="year"></span> <span id="footerName">H2WO STORE</span></span>
   <button class="admin-link" id="showAdmin">ADMIN LOGIN</button>
@@ -73,6 +99,7 @@
 </section>
 </main>
 <div id="toast" role="status" aria-live="polite"></div>
+<script src="/receipt.js" defer></script>
 <script src="/app.js" defer></script>
 </body></html>
 </div>
