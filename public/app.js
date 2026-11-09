@@ -85,7 +85,7 @@ async function refreshStatus(){
   if(!activeOrderId)return;
   let s;
   try{s=await api(`/api/orders/${encodeURIComponent(activeOrderId)}/status`);}
-  catch(err){if(/not found/i.test(err.message)){stopPolling();forgetOrder();resetToOrder();}return;}
+  catch(err){if(/order not found/i.test(err.message)){stopPolling();forgetOrder();resetToOrder();}else{console.warn("Status check failed:",err.message);}return;}
   if(s.paid){
     stopPolling(); showBox("statusSuccess");
     try{const r=await fetchReceipt();await H2WOReceipt.render(r,$("receiptCanvas"));}catch(err){toast(err.message);}
@@ -99,6 +99,7 @@ function showStatus(orderId){
   activeOrderId=orderId; stopPolling();
   $("orderPanel").classList.add("hidden"); $("paymentPanel").classList.add("hidden"); $("statusPanel").classList.remove("hidden");
   window.scrollTo({top:0,behavior:"smooth"});
+  showBox("statusPending"); // never leave the panel blank while the first check runs
   refreshStatus(); pollTimer=setInterval(refreshStatus,8000);
 }
 function resetToOrder(){
