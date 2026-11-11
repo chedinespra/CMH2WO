@@ -1,5 +1,4 @@
 require("dotenv").config();
-
 const express = require("express");
 const session = require("express-session");
 const SQLiteStore = require("connect-sqlite3")(session);
@@ -13,841 +12,364 @@ const fs = require("fs");
 const crypto = require("crypto");
 
 const app = express();
-
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT || 3000);
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, "data");
 const UPLOAD_DIR = path.join(ROOT, "uploads");
-const PROOF_DIR = path.join(UPLOAD_DIR, "proofs");
-const QR_DIR = path.join(UPLOAD_DIR, "qr");
+fs.mkdirSync(DATA_DIR, { recursive: true });
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-for (const dir of [DATA_DIR, UPLOAD_DIR, PROOF_DIR, QR_DIR]) {
-  fs.mkdirSync(dir, { recursive: true });
+if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
+  console.error("SESSION_SECRET is missing or too short. Set a random secret of at least 32 characters in .env.");
+  process.exit(1);
 }
-
-if (!process.env.SESSION_SECRET) {
-  throw new Error("SESSION_SECRET is missing.");
+if (process.env.NODE_ENV === "production" && !process.env.APP_ORIGIN) {
+  console.error("Set APP_ORIGIN in production (for example https://your-domain.com).");
+  process.exit(1);
 }
-
-if (!process.env.APP_ORIGIN) {
-  throw new Error("APP_ORIGIN is missing.");
-}
-
-app.set("trust proxy", 1);
-
-app.use(helmet({
-  contentSecurityPolicy: false
-}));
-
-app.use(express.json({ limit: "100kb" }));
-app.use(express.urlencoded({ extended: false }));
-
 const db = new Database(path.join(DATA_DIR, "site.sqlite"));
-
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
-
-db.exec(
-  CREATE TABLE IF NOT EXISTS admins (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL
-  );
-
-  CREATE TABLE IF NOT EXISTS settings (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-  );
+db.exec(`
+CREATE TABLE IF NOT EXISTS admins (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-
-  CREATE TABLE IF NOT EXISTS orders (
-    id TEXT PRIMARY KEY,
-    username TEXT NOT NULL,
-    days INTEGER NOT NULL,
-    amount_cents INTEGER NOT NULL,
-    reference_number TEXT NOT NULL,
-    proof_filename TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'PENDING',
-    created_at TEXT NOT NULL,
-    reviewed_at TEXT,
-    device_count INTEGER DEFAULT 1,
-    transaction_id TEXT,
-    payment_method TEXT DEFAULT 'GCash',
-    paid_at TEXT
-  );
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
 );
-
-function ensureColumn(table, column, definition) {
-  const columns = db.prepare(PRAGMA table_info(${table})).all();
-
-  if (!columns.some((item) => item.name === column)) {
-    db.exec(ALTER TABLE ${table} ADD COLUMN ${column} ${definition});
-  }
-}
-
-ensureColumn("orders", "device_count", "INTEGER DEFAULT 1");
-ensureColumn("orders", "transaction_id", "TEXT");
-ensureColumn("orders", "payment_method", "TEXT DEFAULT 'GCash'");
-ensureColumn("orders", "paid_at", "TEXT");
-ensureColumn("orders", "reviewed_at", "TEXT");
-
+CREATE TABLE IF NOT EXISTS orders (
+  id TEXT PRIMARY KEY,
+  username TEXT NOT NULL,
+  days INTEGER NOT NULL,
+  amount_cents INTEGER NOT NULL,
+  reference_number TEXT,
+  proof_filename TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING','APPROVED','REJECTED')),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  reviewed_at TEXT
+);
+`);
 const defaults = {
-  siteName: "H2WO STORE",
-  contactUrl: "https://t.me/CMH2WO",
-  groupUrl: "https://t.me/+jomXsgOkv9NkMTBl",
-  qrFilename: ""
+  siteName: "NEXUS GAMING",
+  price1: "100",
+  price7: "200",
+  price30: "500",
+  qrFilename: "",
+  contactUrl: "https://t.me/CMH2WO"
 };
+const insertSetting = db.prepare("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)");
+for (const [k,v] of Object.entries(defaults)) insertSetting.run(k,v);
 
-const getSetting = db.prepare(
-  "SELECT value FROM settings WHERE key = ?"
-);
-
-const saveSetting = db.prepare(
-  INSERT INTO settings (key, value)
-  VALUES (?, ?)
-  ON CONFLICT(key) DO UPDATE SET value = excluded.value
-);
-
-for (const [key, value] of Object.entries(defaults)) {
-  if (!getSetting.get(key)) {
-    saveSetting.run(key, value);
-  }
+// --- Receipt migration: additive only, existing orders/data are preserved ---
+function newTransactionId(createdAt) {
+  const d = createdAt ? new Date(String(createdAt).replace(" ", "T") + "Z") : new Date();
+  const ymd = (isNaN(d) ? new Date() : d).toISOString().slice(0, 10).replace(/-/g, "");
+  const exists = db.prepare("SELECT 1 FROM orders WHERE transaction_id=?");
+  let id;
+  do { id = `H2WO-${ymd}-${crypto.randomBytes(5).toString("hex").toUpperCase()}`; } while (exists.get(id));
+  return id;
 }
-
-function setting(key) {
-  const row = getSetting.get(key);
-  return row ? row.value : defaults[key] || "";
+const orderCols = db.prepare("PRAGMA table_info(orders)").all().map(c => c.name);
+if (!orderCols.includes("transaction_id")) db.exec("ALTER TABLE orders ADD COLUMN transaction_id TEXT");
+if (!orderCols.includes("paid_at")) db.exec("ALTER TABLE orders ADD COLUMN paid_at TEXT");
+if (!orderCols.includes("payment_method")) db.exec("ALTER TABLE orders ADD COLUMN payment_method TEXT NOT NULL DEFAULT 'GCash'");
+for (const r of db.prepare("SELECT id,created_at FROM orders WHERE transaction_id IS NULL").all()) {
+  db.prepare("UPDATE orders SET transaction_id=? WHERE id=?").run(newTransactionId(r.created_at), r.id);
 }
+db.exec("UPDATE orders SET paid_at=COALESCE(reviewed_at,created_at) WHERE status='APPROVED' AND paid_at IS NULL");
+db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_transaction_id ON orders(transaction_id)");
 
-const prices = {
-  1: {
-    1: 200,
-    7: 400,
-    15: 500,
-    30: 600
+app.disable("x-powered-by");
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:"],
+      connectSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      frameAncestors: ["'none'"]
+    }
   },
-  2: {
-    1: 400,
-    7: 500,
-    15: 650,
-    30: 1000,
-    40: 1600
-  },
-  5: {
-    1: 500,
-    7: 1000,
-    15: 1250,
-    30: 1600,
-    40: 2800
-  }
-};
+  crossOriginResourcePolicy: { policy: "same-site" }
+}));
+app.use(express.json({ limit: "100kb" }));
+app.use(express.urlencoded({ extended: false, limit: "20kb" }));
 
-function getPrice(devices, days) {
-  return prices[devices]?.[days] || null;
-}
-
-function makeTransactionId() {
-  const date = new Date()
-    .toISOString()
-    .replace(/[-:TZ.]/g, "")
-    .slice(0, 14);
-
-  return H2WO-${date}-${crypto.randomBytes(3).toString("hex").toUpperCase()};
-}
-
-function validUrl(value) {
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" || url.protocol === "http:";
-  } catch {
-    return false;
-  }
-}
-
-function csrfToken(req) {
-  if (!req.session.csrfToken) {
-    req.session.csrfToken = crypto.randomBytes(32).toString("hex");
-  }
-
-  return req.session.csrfToken;
-}
-
-function csrfCheck(req, res, next) {
-  const token = req.headers["x-csrf-token"];
-
-𝐂𝐌 𝐇2𝐖𝐎, [12.11.2026 06:30]
-if (
-    !token ||
-    !req.session.csrfToken ||
-    token !== req.session.csrfToken
-  ) {
-    return res.status(403).json({
-      error: "Invalid security token. Refresh the page and try again."
-    });
-  }
-
-  next();
-}
-
+const isProd = process.env.NODE_ENV === "production";
+app.set("trust proxy", isProd ? 1 : false);
 app.use(session({
-  store: new SQLiteStore({
-    db: "sessions.sqlite",
-    dir: DATA_DIR
-  }),
+  name: "nexus_admin_session",
+  store: new SQLiteStore({ db: "sessions.sqlite", dir: DATA_DIR }),
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 24 * 60 * 60 * 1000
+    secure: isProd,
+    sameSite: "strict",
+    maxAge: 1000 * 60 * 60 * 8
   }
 }));
 
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 10,
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
-const orderLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 5,
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
-const proofStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, PROOF_DIR);
-  },
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, ${crypto.randomUUID()}${ext});
-  }
-});
-
-const proofUpload = multer({
-  storage: proofStorage,
-  limits: {
-    fileSize: 5 * 1024 * 1024
-  },
-  fileFilter: (_req, file, cb) => {
-    if (!file.mimetype.startsWith("image/")) {
-      return cb(new Error("Only image files are allowed."));
+const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 8, standardHeaders: "draft-7", legacyHeaders: false });
+const orderLimiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: 15, standardHeaders: "draft-7", legacyHeaders: false });
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
+    filename: (_req, file, cb) => {
+      const ext = file.mimetype === "image/png" ? ".png" : ".jpg";
+      cb(null, `${crypto.randomUUID()}${ext}`);
     }
-
-    cb(null, true);
-  }
-});
-
-const qrStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, QR_DIR);
-  },
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, gcash-${crypto.randomUUID()}${ext});
-  }
-});
-
-const qrUpload = multer({
-  storage: qrStorage,
-  limits: {
-    fileSize: 5 * 1024 * 1024
-  },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
   fileFilter: (_req, file, cb) => {
-    if (!file.mimetype.startsWith("image/")) {
-      return cb(new Error("Only image files are allowed."));
-    }
-
-    cb(null, true);
+    const allowed = ["image/jpeg", "image/png"];
+    cb(allowed.includes(file.mimetype) ? null : new Error("Only JPG, JPEG, and PNG images are allowed."), allowed.includes(file.mimetype));
   }
 });
 
+function getSettings() {
+  const rows = db.prepare("SELECT key,value FROM settings").all();
+  return Object.fromEntries(rows.map(r => [r.key, r.value]));
+}
+function setSetting(key, value) {
+  db.prepare("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(key, String(value));
+}
 function requireAdmin(req, res, next) {
-  if (!req.session.adminId) {
-    return res.status(401).json({
-      error: "Admin login required."
-    });
-  }
-
+  if (!req.session.adminId) return res.status(401).json({ error: "Admin login required." });
   next();
 }
-
-function publicOrder(order) {
+function csrfCheck(req, res, next) {
+  return next();
+}
+function csrfToken(req) {
+  if (!req.session.csrfToken) req.session.csrfToken = crypto.randomBytes(32).toString("hex");
+  return req.session.csrfToken;
+}
+function safeDelete(filename) {
+  if (!filename) return;
+  const full = path.join(UPLOAD_DIR, path.basename(filename));
+  if (fs.existsSync(full)) fs.unlinkSync(full);
+}
+function validDays(days) { return [1,7,30].includes(Number(days)); }
+function parsePrice(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 1 || n > 1000000) return null;
+  return Math.round(n * 100);
+}
+function publicOrder(row) {
   return {
-    orderId: order.id,
-    transactionId: order.transaction_id || "",
-    username: order.username,
-    devices: order.device_count || 1,
-    days: order.days,
-    amount: order.amount_cents / 100,
-    referenceNumber: order.reference_number,
-    status: order.status,
-    createdAt: order.created_at,
-    paidAt: order.paid_at || null
+    id: row.id, transactionId: row.transaction_id || "", username: row.username, days: row.days,
+    amount: (row.amount_cents / 100).toFixed(2),
+    referenceNumber: row.reference_number || "",
+    proofUrl: `/api/admin/proofs/${encodeURIComponent(row.proof_filename)}`,
+    status: row.status, createdAt: row.created_at, reviewedAt: row.reviewed_at
   };
 }
 
-app.get("/api/csrf", (req, res) => {
+app.get("/api/public", (req, res) => {
+  const s = getSettings();
+  const prices = {
+    1: Number(s.price1), 7: Number(s.price7), 30: Number(s.price30)
+  };
+  const qrExists = !!s.qrFilename && fs.existsSync(path.join(UPLOAD_DIR, path.basename(s.qrFilename)));
   res.json({
-    token: csrfToken(req)
+    siteName: s.siteName,
+    prices,
+    contactUrl: s.contactUrl || "",
+    qrUrl: qrExists ? `/api/qr?v=${encodeURIComponent(s.qrFilename)}` : null
   });
 });
+app.get("/api/csrf", (req, res) => res.json({ token: csrfToken(req) }));
 
-app.get("/api/public", (_req, res) => {
-  const qrFilename = setting("qrFilename");
-
-  const qrPath = qrFilename
-    ? path.join(QR_DIR, path.basename(qrFilename))
-    : null;
-
-  res.json({
-    siteName: setting("siteName"),
-    contactUrl: setting("contactUrl"),
-    groupUrl: setting("groupUrl"),
-    qrUrl: qrPath && fs.existsSync(qrPath)
-      ? "/api/qr"
-      : null,
-    prices
-  });
-});
-
-app.get("/api/qr", (_req, res) => {
-  const filename = setting("qrFilename");
-
-  if (!filename) {
-    return res.status(404).send("Payment QR not available.");
-  }
-
-  const filePath = path.join(QR_DIR, path.basename(filename));
-
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).send("Payment QR not available.");
-  }
-
-  res.sendFile(filePath);
-});
-
-app.post(
-  "/api/orders",
-  orderLimiter,
-  csrfCheck,
-  proofUpload.single("proof"),
-  (req, res) => {
-    try {
-      const username = String(req.body.username || "").trim();
-      const devices = Number(req.body.devices);
-      const days = Number(req.body.days);
-
-      const referenceNumber = String(
-        req.body.referenceNumber || ""
-      ).trim();
-
-      if (!username || username.length > 80) {
-        return res.status(400).json({
-          error: "Please enter a valid username."
-        });
-      }
-
-      if (!Number.isInteger(devices) || !Number.isInteger(days)) {
-        return res.status(400).json({
-          error: "Invalid package selection."
-        });
-      }
-
-      const amount = getPrice(devices, days);
-
-𝐂𝐌 𝐇2𝐖𝐎, [12.11.2026 06:30]
-if (!amount) {
-        return res.status(400).json({
-          error: "Invalid package or duration."
-        });
-      }
-
-      if (!referenceNumber || referenceNumber.length > 100) {
-        return res.status(400).json({
-          error: "Please enter a valid GCash reference number."
-        });
-      }
-
-      if (!req.file) {
-        return res.status(400).json({
-          error: "Please upload your payment screenshot."
-        });
-      }
-
-      const id = crypto.randomUUID();
-      const transactionId = makeTransactionId();
-      const createdAt = new Date().toISOString();
-
-      db.prepare(
-        INSERT INTO orders (
-          id,
-          username,
-          days,
-          amount_cents,
-          reference_number,
-          proof_filename,
-          status,
-          created_at,
-          device_count,
-          transaction_id,
-          payment_method
-        )
-        VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, 'GCash')
-      ).run(
-        id,
-        username,
-        days,
-        amount * 100,
-        referenceNumber,
-        req.file.filename,
-        createdAt,
-        devices,
-        transactionId
-      );
-
-      res.status(201).json({
-        message: "Order submitted successfully.",
-        orderId: id,
-        transactionId,
-        status: "PENDING"
-      });
-    } catch (error) {
-      console.error("Order error:", error);
-
-      res.status(500).json({
-        error: "Unable to submit order."
-      });
+app.post("/api/orders", orderLimiter, csrfCheck, upload.single("proof"), (req, res) => {
+  try {
+    const username = String(req.body.username || "").trim();
+    const days = Number(req.body.days);
+    const reference = String(req.body.referenceNumber || "").trim().slice(0, 80);
+    if (!username || username.length > 40 || !/^[\p{L}\p{N} _.-]+$/u.test(username)) {
+      if (req.file) safeDelete(req.file.filename);
+      return res.status(400).json({ error: "Enter a valid username (maximum 40 characters)." });
     }
+    if (!validDays(days)) {
+      if (req.file) safeDelete(req.file.filename);
+      return res.status(400).json({ error: "Choose 1, 7, or 30 days." });
+    }
+    if (!req.file) return res.status(400).json({ error: "Upload your payment screenshot." });
+    const settings = getSettings();
+    const amountCents = parsePrice(settings[`price${days}`]);
+    if (amountCents === null) {
+      safeDelete(req.file.filename);
+      return res.status(500).json({ error: "Payment pricing is not configured correctly." });
+    }
+    const id = crypto.randomUUID();
+    const transactionId = newTransactionId();
+    db.prepare(`INSERT INTO orders(id,username,days,amount_cents,reference_number,proof_filename,transaction_id)
+      VALUES(?,?,?,?,?,?,?)`).run(id, username, days, amountCents, reference, req.file.filename, transactionId);
+    res.status(201).json({ message: "Payment submitted successfully! Please wait for admin verification.", orderId: id, transactionId });
+  } catch (err) {
+    if (req.file) safeDelete(req.file.filename);
+    console.error(err);
+    res.status(500).json({ error: "Unable to submit order." });
   }
-);
-
-app.get("/api/orders/:id/status", (req, res) => {
-  const order = db.prepare(
-    "SELECT * FROM orders WHERE id = ?"
-  ).get(req.params.id);
-
-  if (!order) {
-    return res.status(404).json({
-      error: "Order not found."
-    });
-  }
-
-  res.json(publicOrder(order));
 });
 
-app.get("/api/orders/:id/receipt", (req, res) => {
-  const order = db.prepare(
-    "SELECT * FROM orders WHERE id = ?"
-  ).get(req.params.id);
-
-  if (!order) {
-    return res.status(404).json({
-      error: "Order not found."
-    });
+// --- Customer order status + receipt (server-verified: only APPROVED orders are PAID) ---
+const statusLimiter = rateLimit({ windowMs: 5 * 60 * 1000, limit: 120, standardHeaders: "draft-7", legacyHeaders: false });
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const toIso = v => (v ? String(v).replace(" ", "T") + "Z" : null);
+function findOrder(id) {
+  if (!UUID_RE.test(String(id))) return null;
+  return db.prepare("SELECT * FROM orders WHERE id=?").get(String(id)) || null;
+}
+app.get("/api/orders/:id/status", statusLimiter, (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  const o = findOrder(req.params.id);
+  if (!o) return res.status(404).json({ error: "Order not found." });
+  res.json({ status: o.status, paid: o.status === "APPROVED" && !!o.paid_at, transactionId: o.transaction_id });
+});
+app.get("/api/orders/:id/receipt", statusLimiter, (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  const o = findOrder(req.params.id);
+  if (!o) return res.status(404).json({ error: "Order not found." });
+  if (o.status !== "APPROVED" || !o.paid_at) {
+    return res.status(403).json({ error: "Receipt is available only after your payment has been verified.", status: o.status });
   }
-
-  if (order.status !== "APPROVED" || !order.paid_at) {
-    return res.status(403).json({
-      error: "Receipt is available only after payment approval."
-    });
-  }
-
   res.json({
-    receiptNumber: order.transaction_id,
-    orderId: order.id,
-    productName: H2WO Access - ${order.days} Days,
-    username: order.username,
-    devices: order.device_count || 1,
-    amount: order.amount_cents / 100,
-    paymentMethod: order.payment_method || "GCash",
-    referenceNumber: order.reference_number,
+    transactionId: o.transaction_id,
+    customerName: o.username,
+    account: o.username,
+    productName: `H2WO Access - ${o.days} Day${o.days === 1 ? "" : "s"}`,
+    quantity: 1,
+    amount: (o.amount_cents / 100).toFixed(2),
+    paymentMethod: o.payment_method || "GCash",
+    referenceNumber: o.reference_number || "",
+    paidAt: toIso(o.paid_at),
+    issuedAt: new Date().toISOString(),
     status: "PAID",
-    paidAt: order.paid_at
+    contactUrl: getSettings().contactUrl || ""
   });
 });
 
-/* ADMIN AUTHENTICATION */
+app.get("/api/qr", (req, res) => {
+  const s = getSettings();
+  if (!s.qrFilename) return res.status(404).end();
+  const file = path.join(UPLOAD_DIR, path.basename(s.qrFilename));
+  if (!fs.existsSync(file)) return res.status(404).end();
+  res.setHeader("Content-Disposition", 'inline; filename="gcash-qr.png"');
+  res.sendFile(file);
+});
 
-app.post(
-  "/api/admin/login",
-  loginLimiter,
-  csrfCheck,
-  async (req, res) => {
-    try {
-      const username = String(req.body.username || "").trim();
-      const password = String(req.body.password || "");
-
-      const admin = db.prepare(
-        "SELECT * FROM admins WHERE username = ?"
-      ).get(username);
-
-      if (!admin) {
-        return res.status(401).json({
-          error: "Invalid username or password."
-        });
-      }
-
-      const valid = await bcrypt.compare(
-        password,
-        admin.password_hash
-      );
-
-      if (!valid) {
-        return res.status(401).json({
-          error: "Invalid username or password."
-        });
-      }
-
-      req.session.adminId = admin.id;
-      req.session.adminUsername = admin.username;
-
-      res.json({
-        message: "Login successful.",
-        username: admin.username
-      });
-    } catch (error) {
-      console.error("Admin login error:", error);
-
-      res.status(500).json({
-        error: "Login failed."
-      });
-    }
-  }
-);
-
+app.post("/api/admin/login", loginLimiter, csrfCheck, async (req, res) => {
+  const username = String(req.body.username || "").trim();
+  const password = String(req.body.password || "");
+  const admin = db.prepare("SELECT * FROM admins WHERE username=?").get(username);
+  const ok = admin && await bcrypt.compare(password, admin.password_hash);
+  if (!ok) return res.status(401).json({ error: "Invalid username or password." });
+  req.session.regenerate(err => {
+    if (err) return res.status(500).json({ error: "Could not create session." });
+    req.session.adminId = admin.id;
+    req.session.csrfToken = crypto.randomBytes(32).toString("hex");
+    res.json({ message: "Logged in.", token: req.session.csrfToken });
+  });
+});
+app.post("/api/admin/logout", requireAdmin, csrfCheck, (req, res) => {
+  req.session.destroy(() => res.json({ message: "Logged out." }));
+});
 app.get("/api/admin/me", requireAdmin, (req, res) => {
+  const admin = db.prepare("SELECT username FROM admins WHERE id=?").get(req.session.adminId);
+  res.json({ username: admin.username, token: csrfToken(req) });
+});
+app.get("/api/admin/orders", requireAdmin, (req, res) => {
+  const rows = db.prepare("SELECT * FROM orders ORDER BY datetime(created_at) DESC").all();
+  res.json(rows.map(publicOrder));
+});
+app.get("/api/admin/stats", requireAdmin, (req, res) => {
+  const counts = db.prepare(`SELECT
+    COUNT(*) total,
+    SUM(status='PENDING') pending,
+    SUM(status='APPROVED') approved,
+    SUM(status='REJECTED') rejected,
+    COALESCE(SUM(CASE WHEN status='APPROVED' THEN amount_cents ELSE 0 END),0) revenue
+    FROM orders`).get();
   res.json({
-    loggedIn: true,
-    username: req.session.adminUsername
+    total: counts.total || 0, pending: counts.pending || 0,
+    approved: counts.approved || 0, rejected: counts.rejected || 0,
+    revenue: (counts.revenue / 100).toFixed(2)
   });
 });
-
-app.post(
-  "/api/admin/logout",
-  requireAdmin,
-  csrfCheck,
-  (req, res) => {
-    req.session.destroy((error) => {
-      if (error) {
-        return res.status(500).json({
-          error: "Unable to log out."
-        });
-      }
-
-      res.clearCookie("connect.sid");
-
-      res.json({
-        message: "Logged out successfully."
-      });
-    });
+app.get("/api/admin/proofs/:filename", requireAdmin, (req, res) => {
+  const filename = path.basename(req.params.filename);
+  const row = db.prepare("SELECT id FROM orders WHERE proof_filename=?").get(filename);
+  if (!row) return res.status(404).end();
+  const full = path.join(UPLOAD_DIR, filename);
+  if (!fs.existsSync(full)) return res.status(404).end();
+  res.setHeader("Cache-Control", "no-store");
+  res.sendFile(full);
+});
+app.post("/api/admin/orders/:id/status", requireAdmin, csrfCheck, (req, res) => {
+  const status = String(req.body.status || "");
+  if (!["APPROVED", "REJECTED"].includes(status)) return res.status(400).json({ error: "Invalid status." });
+  const result = status === "APPROVED"
+    ? db.prepare("UPDATE orders SET status='APPROVED', reviewed_at=CURRENT_TIMESTAMP, paid_at=COALESCE(paid_at,CURRENT_TIMESTAMP) WHERE id=?").run(req.params.id)
+    : db.prepare("UPDATE orders SET status='REJECTED', reviewed_at=CURRENT_TIMESTAMP, paid_at=NULL WHERE id=?").run(req.params.id);
+  if (!result.changes) return res.status(404).json({ error: "Order not found." });
+  res.json({ message: `Order ${status.toLowerCase()}.` });
+});
+app.delete("/api/admin/orders/:id", requireAdmin, csrfCheck, (req, res) => {
+  const row = db.prepare("SELECT proof_filename FROM orders WHERE id=?").get(req.params.id);
+  if (!row) return res.status(404).json({ error: "Order not found." });
+  db.prepare("DELETE FROM orders WHERE id=?").run(req.params.id);
+  safeDelete(row.proof_filename);
+  res.json({ message: "Order deleted." });
+});
+app.put("/api/admin/settings", requireAdmin, csrfCheck, upload.single("qr"), (req, res) => {
+  const siteName = String(req.body.siteName || "").trim().slice(0, 50);
+  const p1 = parsePrice(req.body.price1), p7 = parsePrice(req.body.price7), p30 = parsePrice(req.body.price30);
+  if (!siteName || p1 === null || p7 === null || p30 === null) {
+    if (req.file) safeDelete(req.file.filename);
+    return res.status(400).json({ error: "Enter a site name and valid prices (₱1 to ₱1,000,000)." });
   }
-);
-
-𝐂𝐌 𝐇2𝐖𝐎, [12.11.2026 06:30]
-/* ADMIN ORDERS */
-
-app.get("/api/admin/orders", requireAdmin, (_req, res) => {
-  const orders = db.prepare(
-    "SELECT * FROM orders ORDER BY created_at DESC"
-  ).all();
-
-  res.json({
-    orders: orders.map((order) => ({
-      ...publicOrder(order),
-      proofFilename: order.proof_filename
-    }))
-  });
+  const contactUrl = req.body.contactUrl === undefined ? null : String(req.body.contactUrl).trim();
+  if (contactUrl !== null && contactUrl !== "" && !/^https:\/\/[^\s<>"']{3,200}$/i.test(contactUrl)) {
+    if (req.file) safeDelete(req.file.filename);
+    return res.status(400).json({ error: "Contact link must start with https:// (e.g. https://t.me/yourname)." });
+  }
+  const oldQr = getSettings().qrFilename;
+  setSetting("siteName", siteName);
+  setSetting("price1", (p1/100).toFixed(2));
+  setSetting("price7", (p7/100).toFixed(2));
+  setSetting("price30", (p30/100).toFixed(2));
+  if (contactUrl !== null) setSetting("contactUrl", contactUrl);
+  if (req.file) {
+    setSetting("qrFilename", req.file.filename);
+    if (oldQr && oldQr !== req.file.filename) safeDelete(oldQr);
+  }
+  res.json({ message: "Settings saved." });
+});
+app.post("/api/admin/change-password", requireAdmin, csrfCheck, async (req, res) => {
+  const current = String(req.body.currentPassword || "");
+  const next = String(req.body.newPassword || "");
+  if (next.length < 12 || next.length > 200) return res.status(400).json({ error: "New password must be at least 12 characters." });
+  const admin = db.prepare("SELECT * FROM admins WHERE id=?").get(req.session.adminId);
+  if (!await bcrypt.compare(current, admin.password_hash)) return res.status(400).json({ error: "Current password is incorrect." });
+  const hash = await bcrypt.hash(next, 12);
+  db.prepare("UPDATE admins SET password_hash=? WHERE id=?").run(hash, req.session.adminId);
+  res.json({ message: "Password changed. Please log in again." });
 });
 
-app.get("/api/admin/stats", requireAdmin, (_req, res) => {
-  const total = db.prepare(
-    "SELECT COUNT(*) AS count FROM orders"
-  ).get().count;
-
-  const pending = db.prepare(
-    SELECT COUNT(*) AS count
-    FROM orders
-    WHERE status = 'PENDING'
-  ).get().count;
-
-  const approved = db.prepare(
-    SELECT COUNT(*) AS count
-    FROM orders
-    WHERE status = 'APPROVED'
-  ).get().count;
-
-  const rejected = db.prepare(
-    SELECT COUNT(*) AS count
-    FROM orders
-    WHERE status = 'REJECTED'
-  ).get().count;
-
-  const revenue = db.prepare(
-    SELECT COALESCE(SUM(amount_cents), 0) AS total
-    FROM orders
-    WHERE status = 'APPROVED'
-  ).get().total;
-
-  res.json({
-    total,
-    pending,
-    approved,
-    rejected,
-    revenue: revenue / 100
-  });
+app.get("/admin.html", requireAdmin, (_req, res) => res.sendFile(path.join(ROOT, "public", "admin.html")));
+app.use(express.static(path.join(ROOT, "public"), { extensions: ["html"] }));
+app.use((err, req, res, _next) => {
+  console.error(err.message);
+  if (err instanceof multer.MulterError) return res.status(400).json({ error: err.code === "LIMIT_FILE_SIZE" ? "Image must be 5 MB or smaller." : "Upload failed." });
+  if (err) return res.status(400).json({ error: err.message || "Request failed." });
 });
-
-app.get(
-  "/api/admin/proofs/:filename",
-  requireAdmin,
-  (req, res) => {
-    const filename = path.basename(req.params.filename);
-    const filePath = path.join(PROOF_DIR, filename);
-
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).send("Proof not found.");
-    }
-
-    res.sendFile(filePath);
-  }
-);
-
-app.post(
-  "/api/admin/orders/:id/status",
-  requireAdmin,
-  csrfCheck,
-  (req, res) => {
-    const status = String(req.body.status || "").toUpperCase();
-
-    if (!["APPROVED", "REJECTED"].includes(status)) {
-      return res.status(400).json({
-        error: "Invalid order status."
-      });
-    }
-
-    const order = db.prepare(
-      "SELECT * FROM orders WHERE id = ?"
-    ).get(req.params.id);
-
-    if (!order) {
-      return res.status(404).json({
-        error: "Order not found."
-      });
-    }
-
-    const now = new Date().toISOString();
-
-    if (status === "APPROVED") {
-      db.prepare(
-        UPDATE orders
-        SET status = 'APPROVED',
-            reviewed_at = ?,
-            paid_at = ?
-        WHERE id = ?
-      ).run(now, now, req.params.id);
-    } else {
-      db.prepare(
-        UPDATE orders
-        SET status = 'REJECTED',
-            reviewed_at = ?,
-            paid_at = NULL
-        WHERE id = ?
-      ).run(now, req.params.id);
-    }
-
-    res.json({
-      message: Order ${status.toLowerCase()}.,
-      status
-    });
-  }
-);
-
-app.delete(
-  "/api/admin/orders/:id",
-  requireAdmin,
-  csrfCheck,
-  (req, res) => {
-    const order = db.prepare(
-      "SELECT * FROM orders WHERE id = ?"
-    ).get(req.params.id);
-
-    if (!order) {
-      return res.status(404).json({
-        error: "Order not found."
-      });
-    }
-
-    db.prepare(
-      "DELETE FROM orders WHERE id = ?"
-    ).run(req.params.id);
-
-    res.json({
-      message: "Order deleted."
-    });
-  }
-);
-
-/* ADMIN SETTINGS */
-
-app.get("/api/admin/settings", requireAdmin, (_req, res) => {
-  res.json({
-    siteName: setting("siteName"),
-    contactUrl: setting("contactUrl"),
-    groupUrl: setting("groupUrl"),
-    qrUrl: setting("qrFilename") ? "/api/qr" : null
-  });
-});
-
-app.post(
-  "/api/admin/settings",
-  requireAdmin,
-  csrfCheck,
-  (req, res) => {
-    const siteName = String(req.body.siteName || "").trim();
-    const contactUrl = String(req.body.contactUrl || "").trim();
-    const groupUrl = String(req.body.groupUrl || "").trim();
-
-    if (
-      !siteName ||
-      siteName.length > 60 ||
-      !validUrl(contactUrl) ||
-      !validUrl(groupUrl)
-    ) {
-      return res.status(400).json({
-        error: "Please check your settings."
-      });
-    }
-
-    saveSetting.run("siteName", siteName);
-    saveSetting.run("contactUrl", contactUrl);
-    saveSetting.run("groupUrl", groupUrl);
-
-    res.json({
-      message: "Settings saved."
-    });
-  }
-);
-
-app.post(
-  "/api/admin/upload-qr",
-  requireAdmin,
-  csrfCheck,
-  qrUpload.single("qr"),
-  (req, res) => {
-    if (!req.file) {
-      return res.status(400).json({
-        error: "Please upload a QR image."
-      });
-    }
-
-𝐂𝐌 𝐇2𝐖𝐎, [12.11.2026 06:30]
-const oldFilename = setting("qrFilename");
-
-    saveSetting.run("qrFilename", req.file.filename);
-
-    if (oldFilename) {
-      const oldPath = path.join(QR_DIR, path.basename(oldFilename));
-
-      if (fs.existsSync(oldPath)) {
-        fs.unlinkSync(oldPath);
-      }
-    }
-
-    res.json({
-      message: "GCash QR uploaded successfully.",
-      qrUrl: "/api/qr"
-    });
-  }
-);
-
-/* CHANGE ADMIN PASSWORD */
-
-app.post(
-  "/api/admin/change-password",
-  requireAdmin,
-  csrfCheck,
-  async (req, res) => {
-    try {
-      const current = String(req.body.currentPassword || "");
-      const next = String(req.body.newPassword || "");
-
-      if (next.length < 12 || next.length > 200) {
-        return res.status(400).json({
-          error: "New password must be at least 12 characters."
-        });
-      }
-
-      const admin = db.prepare(
-        "SELECT * FROM admins WHERE id = ?"
-      ).get(req.session.adminId);
-
-      if (!admin) {
-        return res.status(404).json({
-          error: "Admin account not found."
-        });
-      }
-
-      const valid = await bcrypt.compare(
-        current,
-        admin.password_hash
-      );
-
-      if (!valid) {
-        return res.status(400).json({
-          error: "Current password is incorrect."
-        });
-      }
-
-      const hash = await bcrypt.hash(next, 12);
-
-      db.prepare(
-        "UPDATE admins SET password_hash = ? WHERE id = ?"
-      ).run(hash, admin.id);
-
-      res.json({
-        message: "Password changed successfully."
-      });
-    } catch (error) {
-      console.error("Password change error:", error);
-
-      res.status(500).json({
-        error: "Unable to change password."
-      });
-    }
-  }
-);
-
-/* FRONTEND */
-
-app.use(express.static(path.join(ROOT, "public")));
-
-app.get("/health", (_req, res) => {
-  res.json({
-    status: "ok",
-    site: "H2WO STORE"
-  });
-});
-
-app.use((error, _req, res, _next) => {
-  console.error(error);
-
-  if (error instanceof multer.MulterError) {
-    return res.status(400).json({
-      error: error.message
-    });
-  }
-
-  res.status(400).json({
-    error: error.message || "Something went wrong."
-  });
-});
-
-app.listen(PORT, () => {
-  console.log(H2WO STORE running on port ${PORT});
-});
+app.listen(PORT, () => console.log(`Website running at http://localhost:${PORT}`));

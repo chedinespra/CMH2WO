@@ -14,7 +14,7 @@ async function loadPublic() {
   const d=await api("/api/public");
   $("brandName").textContent=d.siteName; $("footerName").textContent=d.siteName; document.title=d.siteName+" — Payment Portal";
   for (const [day,price] of Object.entries(d.prices)) $("days").querySelector(`option[value="${day}"]`).textContent=`${day} Day${day==="1"?"":"s"} — ${money(price)}`;
-  updatePrice();
+  updatePrice(); setContact(d.contactUrl);
   if (d.qrUrl) {
     $("qrFrame").innerHTML=`<img src="${d.qrUrl}" alt="GCash QR code">`;
     $("downloadQr").href=d.qrUrl; $("downloadQr").classList.remove("hidden");
@@ -58,6 +58,7 @@ $("proofForm").addEventListener("submit",async e=>{
     const d=await api("/api/orders",{method:"POST",headers:{"x-csrf-token":csrf},body:fd});
     $("successMessage").textContent=d.message+" Order ID: "+d.orderId;
     $("successMessage").classList.remove("hidden"); $("proofForm").classList.add("hidden");
+    rememberOrder(d.orderId); showStatus(d.orderId);
   } catch(err) { toast(err.message); button.disabled=false; button.innerHTML='SUBMIT PAYMENT PROOF <span>→</span>'; }
 });
 $("showAdmin").addEventListener("click",()=>{$("adminLoginPanel").classList.remove("hidden");$("adminLoginPanel").scrollIntoView({behavior:"smooth"});});
@@ -70,4 +71,49 @@ $("adminLoginForm").addEventListener("submit",async e=>{
     csrf=d.token; location.href="/admin.html";
   } catch(err){toast(err.message);}
 });
+
+/* ===== Payment status + receipt (server-verified) ===== */
+let pollTimer=null, activeOrderId=null;
+const ORDER_KEY="h2wo_last_order";
+function rememberOrder(id){try{localStorage.setItem(ORDER_KEY,JSON.stringify({id,t:Date.now()}));}catch(_){}}
+function forgetOrder(){try{localStorage.removeItem(ORDER_KEY);}catch(_){}}
+function setContact(url){document.querySelectorAll(".contact-admin").forEach(a=>{if(url){a.href=url;a.classList.remove("hidden");}else{a.classList.add("hidden");}});}
+function stopPolling(){if(pollTimer){clearInterval(pollTimer);pollTimer=null;}}
+function showBox(id){["statusPending","statusSuccess","statusRejected"].forEach(b=>$(b).classList.toggle("hidden",b!==id));}
+async function fetchReceipt(){return api(`/api/orders/${encodeURIComponent(activeOrderId)}/receipt`);}
+async function refreshStatus(){
+  if(!activeOrderId)return;
+  let s;
+  try{s=await api(`/api/orders/${encodeURIComponent(activeOrderId)}/status`);}
+  catch(err){if(/order not found/i.test(err.message)){stopPolling();forgetOrder();resetToOrder();}else{console.warn("Status check failed:",err.message);}return;}
+  if(s.paid){
+    stopPolling(); showBox("statusSuccess");
+    try{const r=await fetchReceipt();await H2WOReceipt.render(r,$("receiptCanvas"));}catch(err){toast(err.message);}
+  } else if(s.status==="REJECTED"){
+    stopPolling(); $("rejectedTx").textContent=s.transactionId||""; showBox("statusRejected");
+  } else {
+    $("pendingTx").textContent=s.transactionId||""; showBox("statusPending");
+  }
+}
+function showStatus(orderId){
+  activeOrderId=orderId; stopPolling();
+  $("orderPanel").classList.add("hidden"); $("paymentPanel").classList.add("hidden"); $("statusPanel").classList.remove("hidden");
+  window.scrollTo({top:0,behavior:"smooth"});
+  showBox("statusPending"); // never leave the panel blank while the first check runs
+  refreshStatus(); pollTimer=setInterval(refreshStatus,8000);
+}
+function resetToOrder(){
+  stopPolling(); activeOrderId=null;
+  $("statusPanel").classList.add("hidden"); $("paymentPanel").classList.add("hidden"); $("orderPanel").classList.remove("hidden");
+  $("proofForm").reset(); $("proofForm").classList.remove("hidden"); $("successMessage").classList.add("hidden");
+  const b=$("proofForm").querySelector("button"); b.disabled=false; b.innerHTML='SUBMIT PAYMENT PROOF <span>→</span>';
+}
+$("downloadReceipt").addEventListener("click",async()=>{
+  const btn=$("downloadReceipt"); btn.disabled=true;
+  try{const r=await fetchReceipt();const canvas=await H2WOReceipt.render(r,$("receiptCanvas"));H2WOReceipt.download(canvas,r);}
+  catch(err){toast(err.message);}
+  finally{btn.disabled=false;}
+});
+$("newOrder").addEventListener("click",()=>{forgetOrder();resetToOrder();});
 loadPublic().catch(e=>toast(e.message));
+try{const saved=JSON.parse(localStorage.getItem(ORDER_KEY)||"null");if(saved&&saved.id&&Date.now()-saved.t<7*24*3600*1000)showStatus(saved.id);}catch(_){}

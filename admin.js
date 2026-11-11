@@ -8,9 +8,9 @@ async function load(){
   const me=await api("/api/admin/me");csrf=me.token;
   const [stats,orders,pub]=await Promise.all([api("/api/admin/stats"),api("/api/admin/orders"),api("/api/public")]);
   $("total").textContent=stats.total;$("pending").textContent=stats.pending;$("approved").textContent=stats.approved;$("rejected").textContent=stats.rejected;$("revenue").textContent=money(stats.revenue);
-  $("siteName").value=pub.siteName;$("price1").value=pub.prices[1];$("price7").value=pub.prices[7];$("price30").value=pub.prices[30];
+  $("siteName").value=pub.siteName;$("price1").value=pub.prices[1];$("price7").value=pub.prices[7];$("price30").value=pub.prices[30];$("contactUrl").value=pub.contactUrl||"";
   $("ordersBody").innerHTML=orders.length?orders.map(o=>`<tr>
-  <td><strong>${esc(o.id.slice(0,8))}</strong><br><small>${esc(new Date(o.createdAt+"Z").toLocaleString())}</small></td>
+  <td><strong>${esc(o.transactionId||o.id.slice(0,8))}</strong><br><small>${esc(new Date(o.createdAt+"Z").toLocaleString())}</small></td>
   <td>${esc(o.username)}</td><td>${o.days} day(s)</td><td>${money(o.amount)}</td><td>${esc(o.referenceNumber||"—")}</td>
   <td><button class="action" data-view="${esc(o.id)}">VIEW</button></td>
   <td><span class="status ${o.status}">${o.status}</span></td>
