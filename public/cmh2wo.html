@@ -17,6 +17,42 @@
 <label for="days">SELECT DURATION</label><select id="days" name="days"><option value="1">1 Day</option><option value="7">7 Days</option><option value="30">30 Days</option></select>
 <div class="price-preview"><span>YOUR TOTAL</span><strong id="price">₱100.00</strong></div>
 <button class="btn primary" type="submit">CONTINUE TO PAYMENT <span>→</span></button>
+<form id="orderForm">
+
+  <label for="username">IN-GAME USERNAME</label>
+  <input
+    id="username"
+    name="username"
+    maxlength="40"
+    placeholder="Enter your username"
+    autocomplete="off"
+    required
+  >
+
+  <label for="device">SELECT DEVICE</label>
+  <select id="device" name="device" required>
+    <option value="1">1 Device</option>
+    <option value="2">2 Devices</option>
+    <option value="5">5 Devices</option>
+  </select>
+
+  <label for="days">SELECT DURATION</label>
+  <select id="days" name="days" required>
+    <option value="1">1 Day — ₱200</option>
+    <option value="7">7 Days — ₱400</option>
+    <option value="15">15 Days — ₱500</option>
+    <option value="30">30 Days — ₱600</option>
+  </select>
+
+  <div class="price-preview">
+    <span>YOUR TOTAL</span>
+    <strong id="price">₱200.00</strong>
+  </div>
+
+  <button class="btn primary" type="submit">
+    CONTINUE TO PAYMENT <span>→</span>
+  </button>
+
 </form>
 </section>
 <section class="panel hidden" id="paymentPanel">
