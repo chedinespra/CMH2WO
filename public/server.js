@@ -82,13 +82,14 @@ const db = new Database(path.join(DATA_DIR, "site.sqlite"));
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
 
-db.exec(
+db.exec(`
   CREATE TABLE IF NOT EXISTS admins (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+`);
 
   CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
