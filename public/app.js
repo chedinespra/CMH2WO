@@ -10,8 +10,11 @@ let csrfToken = "";
 
 async function getCsrf() {
   const response = await fetch("/api/csrf");
+  if (!response.ok) throw new Error("Cannot get security token.");
+
   const data = await response.json();
   csrfToken = data.csrfToken  data.token  "";
+
   return csrfToken;
 }
 
@@ -20,9 +23,7 @@ function peso(amount) {
 }
 
 function updatePrice() {
-  const deviceCount = devices.value;
-  const duration = days.value;
-  const amount = prices[deviceCount]?.[duration];
+  const amount = prices[devices.value]?.[days.value];
 
   priceDisplay.textContent =
     amount == null ? "Unavailable" : peso(amount);
@@ -31,7 +32,10 @@ function updatePrice() {
 async function loadStore() {
   try {
     const response = await fetch("/api/public");
-    if (!response.ok) throw new Error("Cannot load store settings.");
+
+    if (!response.ok) {
+      throw new Error("Cannot load store settings.");
+    }
 
     const data = await response.json();
 
@@ -126,8 +130,10 @@ form.addEventListener("submit", async (event) => {
 
     form.reset();
     updatePrice();
+
   } catch (error) {
     result.textContent = error.message;
+
   } finally {
     button.disabled = false;
     button.textContent = "SUBMIT ORDER";
@@ -167,10 +173,11 @@ if (!response.ok) {
 
     output.textContent =
       "Order Status: " + (data.status || "UNKNOWN");
+
   } catch (error) {
     output.textContent = error.message;
   }
 });
 
-getCsrf().catch(() => {});
+getCsrf().catch(error => console.error(error));
 loadStore();
