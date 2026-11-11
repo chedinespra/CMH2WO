@@ -1,10 +1,86 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#090909">
   <title>H2WO STORE</title>
+  <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <h1>H2WO STORE</h1>
-  <p>Website is running!</p>
+
+<header class="topbar">
+  <div class="brand">H2WO <span>STORE</span></div>
+  <a href="/admin.html" class="admin-link">ADMIN</a>
+</header>
+
+<main class="container">
+  <section class="hero">
+    <p class="eyebrow">PREMIUM GAMING ACCESS</p>
+    <h1>WELCOME TO<br><span>H2WO STORE</span></h1>
+    <p class="subtitle">Fast • Secure • Reliable</p>
+    <a href="#order" class="primary-btn">ORDER NOW</a>
+  </section>
+
+  <section class="panel" id="order">
+    <h2>PLACE YOUR ORDER</h2>
+    <p class="muted">Choose your package below.</p>
+
+    <form id="orderForm">
+      <label>Username / Game ID</label>
+      <input name="username" required placeholder="Enter your username">
+
+      <label>Number of Devices</label>
+      <select name="devices" id="devices" required>
+        <option value="1">1 Device</option>
+        <option value="2">2 Devices</option>
+        <option value="5">5 Devices</option>
+      </select>
+
+      <label>Duration</label>
+      <select name="days" id="days" required>
+        <option value="1">1 Day</option>
+        <option value="7">7 Days</option>
+        <option value="15">15 Days</option>
+        <option value="30">30 Days</option>
+        <option value="40">40 Days</option>
+      </select>
+
+      <div class="price-box">
+        <span>Total Price</span>
+        <strong id="price">₱200</strong>
+      </div>
+
+      <h3>GCash Payment</h3>
+      <div id="qrContainer">
+        <p class="muted">Loading payment QR...</p>
+      </div>
+
+      <label>GCash Reference Number</label>
+      <input name="referenceNumber" required placeholder="Enter reference number">
+
+      <label>Upload Payment Screenshot</label>
+      <input type="file" name="proof" accept="image/*" required>
+
+      <button type="submit" id="submitBtn">SUBMIT ORDER</button>
+    </form>
+
+    <div id="result" class="result"></div>
+  </section>
+
+  <section class="panel">
+    <h2>TRACK YOUR ORDER</h2>
+    <input id="trackId" placeholder="Enter your Order ID">
+    <button type="button" id="trackBtn">TRACK ORDER</button>
+    <div id="trackResult"></div>
+  </section>
+</main>
+
+<footer>
+  <p>© 2026 H2WO STORE. All rights reserved.</p>
+  <a id="groupLink" href="https://t.me/+jomXsgOkv9NkMTBl" target="_blank">JOIN TELEGRAM GROUP</a>
+</footer>
+
+<script src="/app.js"></script>
 </body>
 </html>
