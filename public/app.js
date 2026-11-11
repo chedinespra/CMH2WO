@@ -2,24 +2,50 @@ const form = document.getElementById("orderForm");
 const devices = document.getElementById("devices");
 const days = document.getElementById("days");
 const priceDisplay = document.getElementById("price");
+
+const homePage = document.getElementById("homePage");
+const packagePage = document.getElementById("packagePage");
+const paymentPage = document.getElementById("paymentPage");
+const confirmationPage = document.getElementById("confirmationPage");
+
 const qrContainer = document.getElementById("qrContainer");
+const paymentSummary = document.getElementById("paymentSummary");
+const referenceInput = document.getElementById("referenceNumber");
+const proofInput = document.getElementById("proof");
 const result = document.getElementById("result");
+
+const trackId = document.getElementById("trackId");
+const trackResult = document.getElementById("trackResult");
+const trackingPanel = document.getElementById("trackBtn").closest(".panel");
 
 let prices = {};
 let csrfToken = "";
+let currentOrderId = "";
+
+function showPage(page) {
+  homePage.hidden = page !== homePage;
+  packagePage.hidden = page !== packagePage;
+  paymentPage.hidden = page !== paymentPage;
+  confirmationPage.hidden = page !== confirmationPage;
+
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function peso(amount) {
+  return "₱" + Number(amount || 0).toLocaleString("en-PH");
+}
 
 async function getCsrf() {
   const response = await fetch("/api/csrf");
-  if (!response.ok) throw new Error("Cannot get security token.");
+
+  if (!response.ok) {
+    throw new Error("Cannot get security token.");
+  }
 
   const data = await response.json();
   csrfToken = data.csrfToken  data.token  "";
 
   return csrfToken;
-}
-
-function peso(amount) {
-  return "₱" + Number(amount || 0).toLocaleString("en-PH");
 }
 
 function updatePrice() {
@@ -52,25 +78,78 @@ async function loadStore() {
         "GCash QR is not yet uploaded by the admin.";
     }
 
-    if (data.groupUrl) {
-      document.getElementById("groupLink").href = data.groupUrl;
+    const groupLink = document.getElementById("groupLink");
+
+    if (groupLink && data.groupUrl) {
+      groupLink.href = data.groupUrl;
     }
 
     if (data.siteName) {
       document.title = data.siteName;
     }
+
   } catch (error) {
     qrContainer.textContent = error.message;
   }
 }
 
+// HOME PAGE → PACKAGE PAGE
+document.getElementById("startOrder").addEventListener("click", () => {
+  showPage(packagePage);
+});
+
+// UPDATE PACKAGE PRICE
 devices.addEventListener("change", updatePrice);
 days.addEventListener("change", updatePrice);
 
-form.addEventListener("submit", async (event) => {
-  event.preventDefault();
+// PACKAGE PAGE → PAYMENT PAGE
+document.getElementById("continuePayment").addEventListener("click", () => {
+  if (!form.reportValidity()) {
+    return;
+  }
 
   const amount = prices[devices.value]?.[days.value];
+
+  if (amount == null) {
+    alert("This package is currently unavailable.");
+    return;
+  }
+
+  paymentSummary.textContent =
+    "Username: " + form.elements.username.value +
+    " | Devices: " + devices.value +
+    " | Duration: " + days.value + " Days" +
+    " | Total: " + peso(amount);
+
+  result.textContent = "";
+  showPage(paymentPage);
+});
+
+// PAYMENT PAGE → PACKAGE PAGE
+document.getElementById("backToPackage").addEventListener("click", () => {
+  showPage(packagePage);
+});
+
+// SUBMIT PAYMENT AND CREATE ORDER
+document.getElementById("submitBtn").addEventListener("click", async () => {
+  const referenceNumber = referenceInput.value.trim();
+  const proof = proofInput.files[0];
+
+  if (!referenceNumber) {
+    result.textContent = "Enter your GCash reference number.";
+    return;
+  }
+
+  if (!proof) {
+    result.textContent = "Please upload your payment screenshot.";
+    return;
+  }
+
+  if (!proof.type.startsWith("image/")) {
+    result.textContent = "Please upload an image file.";
+    return;
+  }
+const amount = prices[devices.value]?.[days.value];
 
   if (amount == null) {
     result.textContent = "This package is unavailable.";
@@ -78,18 +157,29 @@ form.addEventListener("submit", async (event) => {
   }
 
   const button = document.getElementById("submitBtn");
+
   button.disabled = true;
   button.textContent = "SUBMITTING...";
   result.textContent = "";
 
   try {
-    if (!csrfToken) await getCsrf();
+    if (!csrfToken) {
+      await getCsrf();
+    }
 
-    const formData = new FormData(form);
+    const formData = new FormData();
+
+    formData.append("username", form.elements.username.value.trim());
+    formData.append("devices", devices.value);
+    formData.append("days", days.value);
+    formData.append("referenceNumber", referenceNumber);
+    formData.append("proof", proof);
 
     let response = await fetch("/api/orders", {
       method: "POST",
-      headers: { "x-csrf-token": csrfToken },
+      headers: {
+        "x-csrf-token": csrfToken
+      },
       body: formData
     });
 
@@ -98,7 +188,9 @@ form.addEventListener("submit", async (event) => {
 
       response = await fetch("/api/orders", {
         method: "POST",
-        headers: { "x-csrf-token": csrfToken },
+        headers: {
+          "x-csrf-token": csrfToken
+        },
         body: formData
       });
     }
@@ -109,57 +201,58 @@ form.addEventListener("submit", async (event) => {
       throw new Error(data.error || "Order submission failed.");
     }
 
-    const orderId = data.orderId || data.id;
-    const transactionId = data.transactionId || "";
+    currentOrderId = data.orderId  data.id  "";
 
-    result.innerHTML = 
-      <div class="price-box">
-        <div>
-          <strong>ORDER SUBMITTED</strong>
-          <p>Save your Order ID:</p>
-          <p>${escapeHTML(orderId || "Not provided")}</p>
-          <p>Transaction: ${escapeHTML(transactionId)}</p>
-          <p>Status: PENDING</p>
-        </div>
-      </div>
-    ;
-
-    if (orderId) {
-      document.getElementById("trackId").value = orderId;
+    if (!currentOrderId) {
+      throw new Error(
+        "Order submitted, but no Order ID was returned."
+      );
     }
 
+    document.getElementById("confirmationOrderId").textContent =
+      currentOrderId;
+
+    trackId.value = currentOrderId;
+
     form.reset();
+    referenceInput.value = "";
+    proofInput.value = "";
+
     updatePrice();
+    showPage(confirmationPage);
 
   } catch (error) {
     result.textContent = error.message;
 
   } finally {
     button.disabled = false;
-    button.textContent = "SUBMIT ORDER";
+    button.textContent = "SUBMIT PAYMENT";
   }
 });
 
-function escapeHTML(value) {
-  return String(value ?? "").replace(/[&<>"']/g, char => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;"
-  })[char]);
-}
+// OPEN ORDER TRACKING
+document.getElementById("trackOrderBtn").addEventListener("click", () => {
+  trackingPanel.hidden = false;
+  trackId.value = currentOrderId;
 
-document.getElementById("trackBtn").addEventListener("click", async () => {
-  const id = document.getElementById("trackId").value.trim();
-  const output = document.getElementById("trackResult");
+  trackingPanel.scrollIntoView({
+    behavior: "smooth",
+    block: "start"
+  });
 
+  if (currentOrderId) {
+    checkOrder(currentOrderId);
+  }
+});
+
+// CHECK ORDER STATUS
+async function checkOrder(id) {
   if (!id) {
-    output.textContent = "Enter your Order ID.";
+    trackResult.textContent = "Enter your Order ID.";
     return;
   }
 
-  output.textContent = "Checking order...";
+  trackResult.textContent = "Checking order...";
 
   try {
     const response = await fetch(
@@ -167,17 +260,28 @@ document.getElementById("trackBtn").addEventListener("click", async () => {
     );
 
     const data = await response.json();
-if (!response.ok) {
+
+    if (!response.ok) {
       throw new Error(data.error || "Order not found.");
     }
 
-    output.textContent =
+    trackResult.textContent =
       "Order Status: " + (data.status || "UNKNOWN");
 
   } catch (error) {
-    output.textContent = error.message;
+    trackResult.textContent = error.message;
   }
+}
+
+// TRACK ORDER BUTTON
+document.getElementById("trackBtn").addEventListener("click", () => {
+  checkOrder(trackId.value.trim());
 });
 
+// INITIAL PAGE
+trackingPanel.hidden = true;
+showPage(homePage);
+
+// LOAD STORE DATA
 getCsrf().catch(error => console.error(error));
 loadStore();
