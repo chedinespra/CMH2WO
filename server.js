@@ -76,7 +76,7 @@ function getPlanPrice(deviceCount, days) {
   return PREMIUM_PRICES[Number(deviceCount)][Number(days)];
 }
 
-// DATABASE
+// ADDITIVE DATABASE MIGRATIONS
 const db = new Database(path.join(DATA_DIR, "site.sqlite"));
 
 db.pragma("journal_mode = WAL");
