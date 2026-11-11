@@ -1,65 +1,71 @@
-# Gaming Login & GCash Payment Portal
+# H2WO STORE - Gaming Top-Up & Payment Platform
 
-A Node.js + Express + SQLite website with a customer order flow and a private admin dashboard. Payments are **manually verified** by the admin; uploading a screenshot does not prove that money was received.
+H2WO STORE is a full-stack web application designed for gaming top-ups featuring an integrated GCash manual verification payment workflow and admin approval panel for generating PAID receipts.
 
-## Requirements
-- Node.js 20 or newer
-- npm
+---
 
-## Run locally
-1. Extract the ZIP.
-2. Open a terminal in the project folder.
-3. Install dependencies:
+## Features
+* **Catalog & Checkout:** Instant selection for Honor of Kings, Mobile Legends, and Crossfire Legends top-up packages.
+* **GCash Payment Workflow:** Customers submit GCash reference numbers for verification upon checkout.
+* **Admin Approval Panel:** Secure admin dashboard requiring authorization token (`x-admin-token`) to review, approve, or reject orders. Approval transitions order status to `PAID_APPROVED`.
+* **Transaction Tracker:** Customers can look up real-time status and admin notes using their Transaction ID.
+
+---
+
+## Local Installation & Development
+
+1. **Clone or extract the project repository.**
+2. **Install dependencies:**
    ```bash
    npm install
    ```
-4. Copy `.env.example` to `.env`.
-5. Set `SESSION_SECRET` to a long random value (at least 32 characters). Example generation:
+3. **Run the development server:**
    ```bash
-   node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+   npm run dev
    ```
-6. Create your private admin account:
-   ```bash
-   npm run setup-admin
-   ```
-   There is no public admin registration.
-7. Start:
+   *or*
    ```bash
    npm start
    ```
-8. Open `http://localhost:3000`.
+4. **Access in browser:**
+   Open `http://localhost:3000` for the store frontend and `http://localhost:3000/admin.html` for the admin portal.
 
-## First setup
-- Visit the website and use **ADMIN LOGIN** at the bottom.
-- Log in with the account created in step 6.
-- In Website Settings, set your website name and prices, then upload your GCash QR image.
-- Customers can now submit orders and payment screenshots.
+---
 
-## Deploy online
-Deploy to a Node.js host that supports Node 20+ and persistent writable storage (for example, a VPS or a platform with a persistent disk).
-- Set `NODE_ENV=production`.
-- Set `SESSION_SECRET` to a strong random secret.
-- Set `APP_ORIGIN` to your exact HTTPS site origin, e.g. `https://example.com` (no trailing slash).
-- Set `PORT` if your host requires it.
-- Run `npm install` and `npm run setup-admin` once against the persistent disk.
-- Start with `npm start`.
-- Use HTTPS. Never expose the admin password or `.env`.
-- Back up `data/site.sqlite` and the `uploads/` directory together.
+## Render Deployment Instructions
 
-**Important storage note:** SQLite and uploaded images are stored on the server's local disk. Do not deploy on a serverless/free host with an ephemeral filesystem; orders and uploads may disappear after redeploy/restart. Use persistent disk or migrate database and file storage to managed services.
+To deploy H2WO STORE on [Render](https://render.com):
 
-## Security notes
-- Admin passwords are bcrypt-hashed.
-- Admin pages and proof images require an authenticated session.
-- Session cookies are HTTP-only and SameSite strict; secure cookies are enabled in production.
-- Login and order endpoints are rate-limited.
-- Image uploads are limited to JPG/PNG and 5 MB.
-- Customer submissions are pending until you manually check the payment in your GCash account.
-- Change the default site prices and upload your own QR before accepting orders.
+1. **Create a New Web Service:**
+   * Connect your GitHub repository containing the project files.
+2. **Configure Build & Start Settings:**
+   * **Environment:** `Node`
+   * **Build Command:** `npm install`
+   * **Start Command:** `npm start`
+3. **Environment Variables:**
+   * Add an environment variable in the Render dashboard:
+     * `PORT` = `3000` (Render will also automatically assign `PORT`)
+     * `ADMIN_TOKEN` = `h2wo_secure_admin_2026` (or your preferred secure password for the admin portal)
+4. **Deploy:** Click **Create Web Service**. Render will build and deploy your application live!
 
-## Project structure
-- `server.js` — API, authentication, database, upload handling
-- `create-admin.js` — one-time admin creation utility
-- `public/` — customer page, admin dashboard, CSS and browser scripts
-- `data/` — SQLite database and sessions (created at runtime)
-- `uploads/` — QR code and payment proof images (created at runtime)
+---
+
+## Project Structure
+```text
+h2wo-store/
+├── package.json
+├── server.js
+├── database/
+│   ├── db.js
+│   └── migrations/
+│       └── 001_initial_schema.js
+├── routes/
+│   ├── orders.js
+│   └── admin.js
+├── public/
+│   ├── index.html
+│   ├── admin.html
+│   ├── style.css
+│   └── script.js
+└── README.md
+```
