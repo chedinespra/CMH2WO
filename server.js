@@ -671,7 +671,7 @@ app.post(
 );
 
 // ADMIN PAGE
-app.get("/admin.html", requireAdmin, (_req, res) => {
+app.get("/admin.html", (_req, res) => {
   const adminFile = path.join(PUBLIC_DIR, "admin.html");
 
   if (!fs.existsSync(adminFile)) return res.status(404).send("Admin page not created yet.");
