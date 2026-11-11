@@ -66,6 +66,25 @@ db.exec(
   );
 );
 
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS orders (
+    id TEXT PRIMARY KEY,
+    username TEXT NOT NULL,
+    days INTEGER NOT NULL,
+    amount_cents INTEGER NOT NULL,
+    reference_number TEXT,
+    proof_filename TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'PENDING'
+      CHECK(status IN ('PENDING','APPROVED','REJECTED')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    reviewed_at TEXT
+  );
+);
+
 // ADDITIVE MIGRATIONS
 const columns = db.prepare("PRAGMA table_info(orders)").all().map(c => c.name);
 
