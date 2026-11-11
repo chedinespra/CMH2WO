@@ -1,3 +1,4 @@
+𝐂𝐌 𝐇2𝐖𝐎, [12.11.2026 06:30]
 require("dotenv").config();
 
 const express = require("express");
@@ -43,6 +44,7 @@ app.use(express.json({ limit: "100kb" }));
 app.use(express.urlencoded({ extended: false }));
 
 const db = new Database(path.join(DATA_DIR, "site.sqlite"));
+
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
 
@@ -77,6 +79,7 @@ db.exec(
 
 function ensureColumn(table, column, definition) {
   const columns = db.prepare(PRAGMA table_info(${table})).all();
+
   if (!columns.some((item) => item.name === column)) {
     db.exec(ALTER TABLE ${table} ADD COLUMN ${column} ${definition});
   }
@@ -171,6 +174,8 @@ function csrfToken(req) {
 
 function csrfCheck(req, res, next) {
   const token = req.headers["x-csrf-token"];
+
+𝐂𝐌 𝐇2𝐖𝐎, [12.11.2026 06:30]
 if (
     !token ||
     !req.session.csrfToken ||
@@ -277,7 +282,7 @@ function publicOrder(order) {
     orderId: order.id,
     transactionId: order.transaction_id || "",
     username: order.username,
-    devices: order.device_count,
+    devices: order.device_count || 1,
     days: order.days,
     amount: order.amount_cents / 100,
     referenceNumber: order.reference_number,
@@ -295,6 +300,7 @@ app.get("/api/csrf", (req, res) => {
 
 app.get("/api/public", (_req, res) => {
   const qrFilename = setting("qrFilename");
+
   const qrPath = qrFilename
     ? path.join(QR_DIR, path.basename(qrFilename))
     : null;
@@ -329,15 +335,14 @@ app.get("/api/qr", (_req, res) => {
 app.post(
   "/api/orders",
   orderLimiter,
-  (req, res, next) => {
-    csrfCheck(req, res, next);
-  },
+  csrfCheck,
   proofUpload.single("proof"),
   (req, res) => {
     try {
       const username = String(req.body.username || "").trim();
       const devices = Number(req.body.devices);
       const days = Number(req.body.days);
+
       const referenceNumber = String(
         req.body.referenceNumber || ""
       ).trim();
@@ -355,6 +360,8 @@ app.post(
       }
 
       const amount = getPrice(devices, days);
+
+𝐂𝐌 𝐇2𝐖𝐎, [12.11.2026 06:30]
 if (!amount) {
         return res.status(400).json({
           error: "Invalid package or duration."
@@ -456,7 +463,7 @@ app.get("/api/orders/:id/receipt", (req, res) => {
     orderId: order.id,
     productName: H2WO Access - ${order.days} Days,
     username: order.username,
-    devices: order.device_count,
+    devices: order.device_count || 1,
     amount: order.amount_cents / 100,
     paymentMethod: order.payment_method || "GCash",
     referenceNumber: order.reference_number,
@@ -521,36 +528,46 @@ app.get("/api/admin/me", requireAdmin, (req, res) => {
   });
 });
 
-app.post("/api/admin/logout", requireAdmin, csrfCheck, (req, res) => {
-  req.session.destroy((error) => {
-    if (error) {
-      return res.status(500).json({
-        error: "Unable to log out."
+app.post(
+  "/api/admin/logout",
+  requireAdmin,
+  csrfCheck,
+  (req, res) => {
+    req.session.destroy((error) => {
+      if (error) {
+        return res.status(500).json({
+          error: "Unable to log out."
+        });
+      }
+
+      res.clearCookie("connect.sid");
+
+      res.json({
+        message: "Logged out successfully."
       });
-    }
-
-    res.clearCookie("connect.sid");
-
-    res.json({
-      message: "Logged out successfully."
     });
-  });
-});
+  }
+);
 
+𝐂𝐌 𝐇2𝐖𝐎, [12.11.2026 06:30]
 /* ADMIN ORDERS */
+
 app.get("/api/admin/orders", requireAdmin, (_req, res) => {
   const orders = db.prepare(
     "SELECT * FROM orders ORDER BY created_at DESC"
   ).all();
 
   res.json({
-    orders: orders.map(publicOrder)
+    orders: orders.map((order) => ({
+      ...publicOrder(order),
+      proofFilename: order.proof_filename
+    }))
   });
 });
 
 app.get("/api/admin/stats", requireAdmin, (_req, res) => {
   const total = db.prepare(
-    SELECT COUNT(*) AS count FROM orders
+    "SELECT COUNT(*) AS count FROM orders"
   ).get().count;
 
   const pending = db.prepare(
@@ -729,8 +746,10 @@ app.post(
       });
     }
 
-    const oldFilename = setting("qrFilename");
-saveSetting.run("qrFilename", req.file.filename);
+𝐂𝐌 𝐇2𝐖𝐎, [12.11.2026 06:30]
+const oldFilename = setting("qrFilename");
+
+    saveSetting.run("qrFilename", req.file.filename);
 
     if (oldFilename) {
       const oldPath = path.join(QR_DIR, path.basename(oldFilename));
