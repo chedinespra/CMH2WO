@@ -22,7 +22,7 @@ function toast(message) {
 }
 
 function money(n) {
-  return "₱" + Number(n).toLocaleString("en-PH", {
+  return "₱" + Number(n || 0).toLocaleString("en-PH", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   });
@@ -38,6 +38,18 @@ function esc(s) {
   }[c]));
 }
 
+function formatDate(value) {
+  if (!value) return "—";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+
+  return date.toLocaleString("en-PH", {
+    dateStyle: "medium",
+    timeStyle: "short"
+  });
+}
+
 /* ===== LOAD ADMIN DASHBOARD ===== */
 
 async function load() {
@@ -50,76 +62,82 @@ async function load() {
     api("/api/public")
   ]);
 
-  $("total").textContent = stats.total;
-  $("pending").textContent = stats.pending;
-  $("approved").textContent = stats.approved;
-  $("rejected").textContent = stats.rejected;
+  $("total").textContent = stats.total ?? 0;
+  $("pending").textContent = stats.pending ?? 0;
+  $("approved").textContent = stats.approved ?? 0;
+  $("rejected").textContent = stats.rejected ?? 0;
   $("revenue").textContent = money(stats.revenue);
 
-  $("siteName").value = pub.siteName;
+  $("siteName").value = pub.siteName || "";
   $("contactUrl").value = pub.contactUrl || "";
 
   /* ===== ORDER TABLE ===== */
 
-  $("ordersBody").innerHTML = orders.length
-    ? orders.map(o => 
-      <tr>
-        <td>
-          <strong>${esc(o.transactionId || o.id.slice(0, 8))}</strong>
-          <br>
-          <small>${esc(new Date(o.createdAt + "Z").toLocaleString())}</small>
-        </td>
+  $("ordersBody").innerHTML = Array.isArray(orders) && orders.length
+    ? orders.map(o => {
+        const deviceCount = Number(o.deviceCount || 1);
+        const days = Number(o.days || 0);
+        const statusClass = String(o.status || "PENDING").toLowerCase();
 
-        <td>${esc(o.username)}</td>
+        return 
+          <tr>
+            <td>
+              <strong>${esc(o.transactionId || String(o.id).slice(0, 8))}</strong>
+              <br>
+              <small>${esc(formatDate(o.createdAt))}</small>
+            </td>
 
-        <td>
-          <strong>${esc(o.deviceCount || 1)} DEVICE(S)</strong>
-          <br>
-          <small>${esc(o.days)} DAY(S)</small>
-        </td>
+            <td>${esc(o.username)}</td>
 
-        <td>
-          <strong>${money(o.amount)}</strong>
-        </td>
+            <td>
+              <strong>${esc(deviceCount)} DEVICE(S)</strong>
+              <br>
+              <small>${esc(days)} DAY(S)</small>
+            </td>
 
-        <td>${esc(o.referenceNumber || "—")}</td>
+            <td>
+              <strong>${money(o.amount)}</strong>
+            </td>
 
-        <td>
-          <button class="action" data-view="${esc(o.id)}">
-            VIEW
-          </button>
-        </td>
+            <td>${esc(o.referenceNumber || "—")}</td>
 
-        <td>
-          <span class="status ${esc(o.status)}">
-            ${esc(o.status)}
-          </span>
-        </td>
+            <td>
+              <button class="action" data-view="${esc(o.id)}">
+                VIEW
+              </button>
+            </td>
 
-        <td>
-          <div class="actions">
-            <button
-              class="action approve"
-              data-status="APPROVED"
-              data-id="${esc(o.id)}"
-              ${o.status === "APPROVED" ? "disabled" : ""}
-            >APPROVE</button>
+            <td>
+              <span class="status ${esc(statusClass)}">
+                ${esc(o.status || "PENDING")}
+              </span>
+            </td>
 
-            <button
-              class="action reject"
-              data-status="REJECTED"
-              data-id="${esc(o.id)}"
-              ${o.status === "REJECTED" ? "disabled" : ""}
-            >REJECT</button>
+            <td>
+              <div class="actions">
+                <button
+                  class="action approve"
+                  data-status="APPROVED"
+                  data-id="${esc(o.id)}"
+                  ${o.status === "APPROVED" ? "disabled" : ""}
+                >APPROVE</button>
 
-            <button
-              class="action"
-              data-delete="${esc(o.id)}"
-            >DELETE</button>
-          </div>
-        </td>
-      </tr>
-    ).join("")
+                <button
+                  class="action reject"
+                  data-status="REJECTED"
+                  data-id="${esc(o.id)}"
+                  ${o.status === "REJECTED" ? "disabled" : ""}
+                >REJECT</button>
+
+                <button
+                  class="action"
+                  data-delete="${esc(o.id)}"
+                >DELETE</button>
+              </div>
+            </td>
+          </tr>
+        ;
+      }).join("")
     : '<tr><td colspan="8" class="empty">No customer orders yet.</td></tr>';
 }
 
@@ -133,50 +151,51 @@ $("ordersBody").addEventListener("click", async e => {
   try {
     if (view) {
       const orders = await api("/api/admin/orders");
-      const order = orders.find(o => o.id === view.dataset.view);
-
-      if (!order) return;
+      const order = orders.find(o => String(o.id) === view.dataset.view);
+if (!order || !order.proofUrl) {
+        toast("Payment proof not found.");
+        return;
+      }
 
       $("proofImage").src = order.proofUrl;
       $("proofModal").classList.remove("hidden");
+      return;
     }
 
     if (status) {
-      if (!confirm(
-        Mark this payment ${status.dataset.status.toLowerCase()}?
-      )) return;
+      const newStatus = status.dataset.status;
 
-      await api(
-        /api/admin/orders/${status.dataset.id}/status,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-csrf-token": csrf
-          },
-          body: JSON.stringify({
-            status: status.dataset.status
-          })
-        }
-      );
+      if (!confirm(Mark this payment ${newStatus.toLowerCase()}?)) {
+        return;
+      }
+
+      await api(/api/admin/orders/${encodeURIComponent(status.dataset.id)}/status, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-csrf-token": csrf
+        },
+        body: JSON.stringify({
+          status: newStatus
+        })
+      });
 
       toast("Payment status updated.");
       await load();
+      return;
     }
-if (del) {
-      if (!confirm(
-        "Permanently delete this order and its uploaded proof?"
-      )) return;
 
-      await api(
-        /api/admin/orders/${del.dataset.delete},
-        {
-          method: "DELETE",
-          headers: {
-            "x-csrf-token": csrf
-          }
+    if (del) {
+      if (!confirm("Permanently delete this order and its uploaded proof?")) {
+        return;
+      }
+
+      await api(/api/admin/orders/${encodeURIComponent(del.dataset.delete)}, {
+        method: "DELETE",
+        headers: {
+          "x-csrf-token": csrf
         }
-      );
+      });
 
       toast("Order deleted.");
       await load();
@@ -197,11 +216,13 @@ $("refresh").addEventListener("click", () => {
 
 $("closeModal").addEventListener("click", () => {
   $("proofModal").classList.add("hidden");
+  $("proofImage").removeAttribute("src");
 });
 
 $("proofModal").addEventListener("click", e => {
   if (e.target === $("proofModal")) {
     $("proofModal").classList.add("hidden");
+    $("proofImage").removeAttribute("src");
   }
 });
 
@@ -278,6 +299,12 @@ $("logout").addEventListener("click", async () => {
 
 /* ===== INITIALIZE ===== */
 
-load().catch(() => {
-  location.href = "/";
+load().catch(err => {
+  console.error("Admin dashboard error:", err);
+  toast(err.message);
+  if (err.message) {
+    setTimeout(() => {
+      if (!csrf) location.href = "/";
+    }, 1500);
+  }
 });
