@@ -22,19 +22,18 @@ fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32) {
-  console.error("SESSION_SECRET is missing or too short. Set a random secret of at least 32 characters.");
+  console.error("SESSION_SECRET must be at least 32 characters.");
   process.exit(1);
 }
 
-if (process.env.NODE_ENV === "production" && !process.env.APP_ORIGIN) {
-  console.error("Set APP_ORIGIN in production.");
+const isProd = process.env.NODE_ENV === "production";
+
+if (isProd && !process.env.APP_ORIGIN) {
+  console.error("APP_ORIGIN is required in production.");
   process.exit(1);
 }
 
-/* =========================
-   PREMIUM PACKAGE PRICING
-========================= */
-
+// PREMIUM PACKAGE PRICES (PHP)
 const PREMIUM_PRICES = {
   1: {
     1: 200,
@@ -59,12 +58,16 @@ const PREMIUM_PRICES = {
 };
 
 function validPlan(deviceCount, days) {
-  const device = Number(deviceCount);
+  const devices = Number(deviceCount);
   const duration = Number(days);
 
-  return Boolean(
-    PREMIUM_PRICES[device] &&
-    PREMIUM_PRICES[device][duration]
+  return Object.prototype.hasOwnProperty.call(
+    PREMIUM_PRICES,
+    devices
+  ) &&
+  Object.prototype.hasOwnProperty.call(
+    PREMIUM_PRICES[devices],
+    duration
   );
 }
 
@@ -73,10 +76,7 @@ function getPlanPrice(deviceCount, days) {
   return PREMIUM_PRICES[Number(deviceCount)][Number(days)];
 }
 
-/* =========================
-   DATABASE
-========================= */
-
+// DATABASE
 const db = new Database(path.join(DATA_DIR, "site.sqlite"));
 
 db.pragma("journal_mode = WAL");
@@ -109,45 +109,30 @@ CREATE TABLE IF NOT EXISTS orders (
 );
 );
 
-/* Additive migrations: existing orders are preserved. */
+// ADDITIVE DATABASE MIGRATIONS
+const orderColumns = db
+  .prepare("PRAGMA table_info(orders)")
+  .all()
+  .map(column => column.name);
 
-function hasColumn(table, column) {
-  return db.prepare(PRAGMA table_info(${table}))
-    .all()
-    .some(item => item.name === column);
+if (!orderColumns.includes("device_count")) {
+  db.exec(
+    "ALTER TABLE orders ADD COLUMN device_count INTEGER NOT NULL DEFAULT 1"
+  );
 }
 
-if (!hasColumn("orders", "device_count")) {
-  db.exec("ALTER TABLE orders ADD COLUMN device_count INTEGER NOT NULL DEFAULT 1");
-}
-
-if (!hasColumn("orders", "transaction_id")) {
+if (!orderColumns.includes("transaction_id")) {
   db.exec("ALTER TABLE orders ADD COLUMN transaction_id TEXT");
 }
 
-if (!hasColumn("orders", "paid_at")) {
+if (!orderColumns.includes("paid_at")) {
   db.exec("ALTER TABLE orders ADD COLUMN paid_at TEXT");
 }
 
-if (!hasColumn("orders", "payment_method")) {
-  db.exec("ALTER TABLE orders ADD COLUMN payment_method TEXT NOT NULL DEFAULT 'GCash'");
-}
-
-const defaults = {
-  siteName: "H2WO STORE",
-  price1: "100",
-  price7: "200",
-  price30: "500",
-  qrFilename: "",
-  contactUrl: "https://t.me/CMH2WO"
-};
-
-const insertSetting = db.prepare(
-  "INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)"
-);
-
-for (const [key, value] of Object.entries(defaults)) {
-  insertSetting.run(key, value);
+if (!orderColumns.includes("payment_method")) {
+  db.exec(
+    "ALTER TABLE orders ADD COLUMN payment_method TEXT NOT NULL DEFAULT 'GCash'"
+  );
 }
 
 function newTransactionId(createdAt) {
@@ -155,48 +140,83 @@ function newTransactionId(createdAt) {
     ? new Date(String(createdAt).replace(" ", "T") + "Z")
     : new Date();
 
-  const validDate = isNaN(date.getTime()) ? new Date() : date;
-  const ymd = validDate.toISOString().slice(0, 10).replace(/-/g, "");
+  const validDate = Number.isNaN(date.getTime())
+    ? new Date()
+    : date;
+
+  const ymd = validDate
+    .toISOString()
+    .slice(0, 10)
+    .replace(/-/g, "");
 
   const exists = db.prepare(
-    "SELECT 1 FROM orders WHERE transaction_id=?"
+    "SELECT 1 FROM orders WHERE transaction_id = ?"
   );
 
   let id;
-Telegram
-𝐂𝐌 𝐇2𝐖𝐎
-VIEW MESSAGE
-do {
-    id = H2WO-${ymd}-${crypto.randomBytes(5).toString("hex").toUpperCase()};
+
+  do {
+    id = H2WO-${ymd}-${crypto.randomBytes(5)
+      .toString("hex")
+      .toUpperCase()};
   } while (exists.get(id));
 
   return id;
 }
 
 for (const order of db.prepare(
-  "SELECT id,created_at FROM orders WHERE transaction_id IS NULL"
+  "SELECT id, created_at FROM orders WHERE transaction_id IS NULL"
 ).all()) {
   db.prepare(
-    "UPDATE orders SET transaction_id=? WHERE id=?"
+    "UPDATE orders SET transaction_id = ? WHERE id = ?"
   ).run(newTransactionId(order.created_at), order.id);
 }
-
 db.exec(
-  UPDATE orders
-  SET paid_at=COALESCE(reviewed_at,created_at)
-  WHERE status='APPROVED' AND paid_at IS NULL
+UPDATE orders
+SET paid_at = COALESCE(reviewed_at, created_at)
+WHERE status = 'APPROVED' AND paid_at IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_transaction_id
+ON orders(transaction_id);
 );
 
-db.exec(
-  CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_transaction_id
-  ON orders(transaction_id)
+// DEFAULT SETTINGS
+const defaults = {
+  siteName: "H2WO STORE",
+  qrFilename: "",
+  contactUrl: "https://t.me/CMH2WO"
+};
+
+const insertSetting = db.prepare(
+  "INSERT OR IGNORE INTO settings(key, value) VALUES(?, ?)"
 );
 
-/* =========================
-   SECURITY AND MIDDLEWARE
-========================= */
+for (const [key, value] of Object.entries(defaults)) {
+  insertSetting.run(key, value);
+}
 
+function getSettings() {
+  const rows = db.prepare(
+    "SELECT key, value FROM settings"
+  ).all();
+
+  return Object.fromEntries(
+    rows.map(row => [row.key, row.value])
+  );
+}
+
+function setSetting(key, value) {
+  db.prepare(
+    INSERT INTO settings(key, value)
+    VALUES(?, ?)
+    ON CONFLICT(key)
+    DO UPDATE SET value = excluded.value
+  ).run(key, String(value));
+}
+
+// SECURITY
 app.disable("x-powered-by");
+app.set("trust proxy", isProd ? 1 : false);
 
 app.use(helmet({
   contentSecurityPolicy: {
@@ -221,10 +241,6 @@ app.use(express.urlencoded({
   extended: false,
   limit: "20kb"
 }));
-
-const isProd = process.env.NODE_ENV === "production";
-
-app.set("trust proxy", isProd ? 1 : false);
 
 app.use(session({
   name: "h2wo_admin_session",
@@ -264,17 +280,17 @@ const statusLimiter = rateLimit({
   legacyHeaders: false
 });
 
-/* =========================
-   FILE UPLOAD
-========================= */
-
+// IMAGE UPLOAD
 const upload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => {
       cb(null, UPLOAD_DIR);
     },
     filename: (_req, file, cb) => {
-      const ext = file.mimetype === "image/png" ? ".png" : ".jpg";
+      const ext = file.mimetype === "image/png"
+        ? ".png"
+        : ".jpg";
+
       cb(null, ${crypto.randomUUID()}${ext});
     }
   }),
@@ -283,39 +299,22 @@ const upload = multer({
     files: 1
   },
   fileFilter: (_req, file, cb) => {
-    const allowed = ["image/jpeg", "image/png"];
-    const valid = allowed.includes(file.mimetype);
+    const allowed = [
+      "image/jpeg",
+      "image/png"
+    ];
 
-    cb(
-      valid ? null : new Error("Only JPG, JPEG, and PNG images are allowed."),
-      valid
-    );
+    if (!allowed.includes(file.mimetype)) {
+      return cb(
+        new Error("Only JPG, JPEG, and PNG images are allowed.")
+      );
+    }
+
+    cb(null, true);
   }
 });
 
-/* =========================
-   HELPER FUNCTIONS
-========================= */
-
-function getSettings() {
-  const rows = db.prepare(
-    "SELECT key,value FROM settings"
-  ).all();
-
-  return Object.fromEntries(
-    rows.map(row => [row.key, row.value])
-  );
-}
-
-function setSetting(key, value) {
-  db.prepare(
-    INSERT INTO settings(key,value)
-    VALUES(?,?)
-    ON CONFLICT(key)
-    DO UPDATE SET value=excluded.value
-  ).run(key, String(value));
-}
-
+// MIDDLEWARE
 function requireAdmin(req, res, next) {
   if (!req.session.adminId) {
     return res.status(401).json({
@@ -326,9 +325,14 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-/* Retained from the existing project. */
-function csrfCheck(req, res, next) {
-  return next();
+function csrfToken(req) {
+  if (!req.session.csrfToken) {
+    req.session.csrfToken = crypto
+      .randomBytes(32)
+      .toString("hex");
+  }
+
+  return req.session.csrfToken;
 }
 
 function csrfCheck(req, res, next) {
@@ -347,50 +351,51 @@ function csrfCheck(req, res, next) {
   next();
 }
 
-  return req.session.csrfToken;
-}
-
 function safeDelete(filename) {
   if (!filename) return;
 
-  const full = path.join(
+  const fullPath = path.join(
     UPLOAD_DIR,
     path.basename(filename)
   );
 
-  if (fs.existsSync(full)) {
-    fs.unlinkSync(full);
+  if (fs.existsSync(fullPath)) {
+    fs.unlinkSync(fullPath);
   }
 }
+
 function publicOrder(row) {
   return {
     id: row.id,
-    transactionId: row.transaction_id || "",
+Telegram
+𝐂𝐌 𝐇2𝐖𝐎
+VIEW MESSAGE
+transactionId: row.transaction_id || "",
     username: row.username,
-    deviceCount: Number(row.device_count || 1),
+    deviceCount: row.device_count || 1,
     days: row.days,
     amount: (row.amount_cents / 100).toFixed(2),
     referenceNumber: row.reference_number || "",
-    proofUrl: /api/admin/proofs/${encodeURIComponent(row.proof_filename)},
+    proofUrl: /api/admin/proofs/${encodeURIComponent(
+      row.proof_filename
+    )},
     status: row.status,
     createdAt: row.created_at,
     reviewedAt: row.reviewed_at
   };
 }
 
-/* =========================
-   PUBLIC API
-========================= */
-
+// PUBLIC API
 app.get("/api/public", (req, res) => {
   const settings = getSettings();
 
-  const qrExists = Boolean(
-    settings.qrFilename &&
+  const qrExists = !!settings.qrFilename &&
     fs.existsSync(
-      path.join(UPLOAD_DIR, path.basename(settings.qrFilename))
-    )
-  );
+      path.join(
+        UPLOAD_DIR,
+        path.basename(settings.qrFilename)
+      )
+    );
 
   res.json({
     siteName: settings.siteName || "H2WO STORE",
@@ -408,10 +413,7 @@ app.get("/api/csrf", (req, res) => {
   });
 });
 
-/* =========================
-   CUSTOMER ORDER SUBMISSION
-========================= */
-
+// CREATE CUSTOMER ORDER
 app.post(
   "/api/orders",
   orderLimiter,
@@ -419,9 +421,16 @@ app.post(
   upload.single("proof"),
   (req, res) => {
     try {
-      const username = String(req.body.username || "").trim();
-      const deviceCount = Number(req.body.deviceCount);
+      const username = String(
+        req.body.username || ""
+      ).trim();
+
+      const deviceCount = Number(
+        req.body.deviceCount
+      );
+
       const days = Number(req.body.days);
+
       const reference = String(
         req.body.referenceNumber || ""
       ).trim().slice(0, 80);
@@ -442,7 +451,7 @@ app.post(
         if (req.file) safeDelete(req.file.filename);
 
         return res.status(400).json({
-          error: "Invalid device and duration package."
+          error: "Invalid device package or duration."
         });
       }
 
@@ -452,9 +461,9 @@ app.post(
         });
       }
 
-      /* Always calculate the price on the server. */
-      const amountPesos = getPlanPrice(deviceCount, days);
-      const amountCents = amountPesos * 100;
+      // NEVER TRUST THE CLIENT-SUBMITTED PRICE
+      const amount = getPlanPrice(deviceCount, days);
+      const amountCents = amount * 100;
 
       const id = crypto.randomUUID();
       const transactionId = newTransactionId();
@@ -463,19 +472,19 @@ app.post(
         INSERT INTO orders (
           id,
           username,
-          device_count,
           days,
+          device_count,
           amount_cents,
           reference_number,
           proof_filename,
           transaction_id
         )
-        VALUES (?,?,?,?,?,?,?,?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ).run(
         id,
         username,
-        deviceCount,
         days,
+        deviceCount,
         amountCents,
         reference,
         req.file.filename,
@@ -485,7 +494,10 @@ app.post(
       res.status(201).json({
         message: "Payment submitted successfully! Please wait for admin verification.",
         orderId: id,
-        transactionId
+        transactionId,
+        deviceCount,
+        days,
+        amount: amount.toFixed(2)
       });
 
     } catch (err) {
@@ -500,81 +512,91 @@ app.post(
   }
 );
 
-/* =========================
-   CUSTOMER STATUS AND RECEIPT
-========================= */
-
+// CUSTOMER STATUS AND RECEIPT
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-const toIso = value =>
-  value ? String(value).replace(" ", "T") + "Z" : null;
 
 function findOrder(id) {
   if (!UUID_RE.test(String(id))) return null;
 
   return db.prepare(
-    "SELECT * FROM orders WHERE id=?"
+    "SELECT * FROM orders WHERE id = ?"
   ).get(String(id)) || null;
 }
 
-app.get("/api/orders/:id/status", statusLimiter, (req, res) => {
-  res.setHeader("Cache-Control", "no-store");
+function toIso(value) {
+  return value
+    ? String(value).replace(" ", "T") + "Z"
+    : null;
+}
 
-  const order = findOrder(req.params.id);
+app.get(
+  "/api/orders/:id/status",
+  statusLimiter,
+  (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
 
-  if (!order) {
-    return res.status(404).json({
-      error: "Order not found."
+    const order = findOrder(req.params.id);
+
+    if (!order) {
+      return res.status(404).json({
+        error: "Order not found."
+      });
+    }
+
+    res.json({
+      status: order.status,
+      paid: order.status === "APPROVED" && !!order.paid_at,
+      transactionId: order.transaction_id
     });
   }
+);
+app.get(
+  "/api/orders/:id/receipt",
+  statusLimiter,
+  (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
 
-  res.json({
-    status: order.status,
-    paid: order.status === "APPROVED" && Boolean(order.paid_at),
-    transactionId: order.transaction_id
-  });
-});
-app.get("/api/orders/:id/receipt", statusLimiter, (req, res) => {
-  res.setHeader("Cache-Control", "no-store");
+    const order = findOrder(req.params.id);
 
-  const order = findOrder(req.params.id);
+    if (!order) {
+      return res.status(404).json({
+        error: "Order not found."
+      });
+    }
 
-  if (!order) {
-    return res.status(404).json({
-      error: "Order not found."
+    if (
+      order.status !== "APPROVED" ||
+      !order.paid_at
+    ) {
+      return res.status(403).json({
+        error: "Receipt is available only after your payment has been verified.",
+        status: order.status
+      });
+    }
+
+    const deviceCount = order.device_count || 1;
+
+    res.json({
+      transactionId: order.transaction_id,
+      customerName: order.username,
+      account: order.username,
+      productName: H2WO PREMIUM - ${deviceCount} Device${deviceCount === 1 ? "" : "s"} - ${order.days} Days,
+      deviceCount,
+      days: order.days,
+      quantity: deviceCount,
+      amount: (order.amount_cents / 100).toFixed(2),
+      paymentMethod: order.payment_method || "GCash",
+      referenceNumber: order.reference_number || "",
+      paidAt: toIso(order.paid_at),
+      issuedAt: new Date().toISOString(),
+      status: "PAID",
+      contactUrl: getSettings().contactUrl || ""
     });
   }
+);
 
-  if (order.status !== "APPROVED" || !order.paid_at) {
-    return res.status(403).json({
-      error: "Receipt is available only after your payment has been verified.",
-      status: order.status
-    });
-  }
-
-  const deviceCount = Number(order.device_count || 1);
-
-  res.json({
-    transactionId: order.transaction_id,
-    customerName: order.username,
-    account: order.username,
-    productName: H2WO Premium Access - ${deviceCount} Device${deviceCount === 1 ? "" : "s"} - ${order.days} Day${order.days === 1 ? "" : "s"},
-    quantity: deviceCount,
-    amount: (order.amount_cents / 100).toFixed(2),
-    paymentMethod: order.payment_method || "GCash",
-    referenceNumber: order.reference_number || "",
-    paidAt: toIso(order.paid_at),
-    issuedAt: new Date().toISOString(),
-    status: "PAID",
-    contactUrl: getSettings().contactUrl || ""
-  });
-});
-
-/* =========================
-   GCASH QR
-========================= */
-
+// QR CODE
 app.get("/api/qr", (req, res) => {
   const settings = getSettings();
 
@@ -599,20 +621,22 @@ app.get("/api/qr", (req, res) => {
   res.sendFile(file);
 });
 
-/* =========================
-   ADMIN LOGIN AND SESSION
-========================= */
-
+// ADMIN LOGIN
 app.post(
   "/api/admin/login",
   loginLimiter,
   csrfCheck,
   async (req, res) => {
-    const username = String(req.body.username || "").trim();
-    const password = String(req.body.password || "");
+    const username = String(
+      req.body.username || ""
+    ).trim();
+
+    const password = String(
+      req.body.password || ""
+    );
 
     const admin = db.prepare(
-      "SELECT * FROM admins WHERE username=?"
+      "SELECT * FROM admins WHERE username = ?"
     ).get(username);
 
     const ok = admin &&
@@ -632,7 +656,9 @@ app.post(
       }
 
       req.session.adminId = admin.id;
-      req.session.csrfToken = crypto.randomBytes(32).toString("hex");
+      req.session.csrfToken = crypto
+        .randomBytes(32)
+        .toString("hex");
 
       res.json({
         message: "Logged in.",
@@ -647,7 +673,15 @@ app.post(
   requireAdmin,
   csrfCheck,
   (req, res) => {
-    req.session.destroy(() => {
+    req.session.destroy(err => {
+      if (err) {
+        return res.status(500).json({
+          error: "Could not log out."
+        });
+      }
+
+      res.clearCookie("h2wo_admin_session");
+
       res.json({
         message: "Logged out."
       });
@@ -655,95 +689,113 @@ app.post(
   }
 );
 
-app.get("/api/admin/me", requireAdmin, (req, res) => {
-  const admin = db.prepare(
-    "SELECT username FROM admins WHERE id=?"
-  ).get(req.session.adminId);
+app.get(
+  "/api/admin/me",
+  requireAdmin,
+  (req, res) => {
+    const admin = db.prepare(
+      "SELECT username FROM admins WHERE id = ?"
+    ).get(req.session.adminId);
 
-  res.json({
-    username: admin.username,
-    token: csrfToken(req)
-  });
-});
+    if (!admin) {
+      return res.status(401).json({
+        error: "Admin account not found."
+      });
+    }
 
-/* =========================
-   ADMIN ORDERS AND STATS
-========================= */
+    res.json({
+      username: admin.username,
+      token: csrfToken(req)
+    });
+  }
+);
 
-app.get("/api/admin/orders", requireAdmin, (req, res) => {
-  const rows = db.prepare(
-    SELECT *
-    FROM orders
-    ORDER BY datetime(created_at) DESC
-  ).all();
+// ADMIN ORDERS
+app.get(
+  "/api/admin/orders",
+  requireAdmin,
+  (req, res) => {
+    const rows = db.prepare(
+      SELECT *
+      FROM orders
+      ORDER BY datetime(created_at) DESC
+    ).all();
 
-  res.json(rows.map(publicOrder));
-});
+    res.json(rows.map(publicOrder));
+  }
+);
 
-app.get("/api/admin/stats", requireAdmin, (req, res) => {
-  const counts = db.prepare(
-    SELECT
-      COUNT(*) AS total,
-      SUM(status='PENDING') AS pending,
-      SUM(status='APPROVED') AS approved,
-      SUM(status='REJECTED') AS rejected,
-      COALESCE(
-        SUM(
-          CASE
-            WHEN status='APPROVED' THEN amount_cents
-            ELSE 0
-          END
-        ),
-        0
-      ) AS revenue
-    FROM orders
-  ).get();
+// ADMIN STATISTICS
+app.get(
+  "/api/admin/stats",
+  requireAdmin,
+  (req, res) => {
+    const counts = db.prepare(
+      SELECT
+        COUNT(*) AS total,
+        SUM(status = 'PENDING') AS pending,
+        SUM(status = 'APPROVED') AS approved,
+        SUM(status = 'REJECTED') AS rejected,
+        COALESCE(
+          SUM(
+            CASE
+              WHEN status = 'APPROVED'
+              THEN amount_cents
+              ELSE 0
+            END
+          ),
+          0
+        ) AS revenue
+      FROM orders
+    ).get();
+res.json({
+      total: counts.total || 0,
+      pending: counts.pending || 0,
+      approved: counts.approved || 0,
+      rejected: counts.rejected || 0,
+      revenue: (counts.revenue / 100).toFixed(2)
+    });
+  }
+);
 
-  res.json({
-    total: counts.total || 0,
-    pending: counts.pending || 0,
-    approved: counts.approved || 0,
-    rejected: counts.rejected || 0,
-    revenue: (counts.revenue / 100).toFixed(2)
-  });
-});
-
-/* =========================
-   ADMIN PAYMENT PROOFS
-========================= */
+// ADMIN PAYMENT PROOFS
 app.get(
   "/api/admin/proofs/:filename",
   requireAdmin,
   (req, res) => {
-    const filename = path.basename(req.params.filename);
+    const filename = path.basename(
+      req.params.filename
+    );
 
     const row = db.prepare(
-      "SELECT id FROM orders WHERE proof_filename=?"
+      "SELECT id FROM orders WHERE proof_filename = ?"
     ).get(filename);
 
     if (!row) return res.status(404).end();
 
-    const full = path.join(UPLOAD_DIR, filename);
+    const fullPath = path.join(
+      UPLOAD_DIR,
+      filename
+    );
 
-    if (!fs.existsSync(full)) {
+    if (!fs.existsSync(fullPath)) {
       return res.status(404).end();
     }
 
     res.setHeader("Cache-Control", "no-store");
-    res.sendFile(full);
+    res.sendFile(fullPath);
   }
 );
 
-/* =========================
-   ADMIN APPROVE / REJECT
-========================= */
-
+// APPROVE OR REJECT ORDER
 app.post(
   "/api/admin/orders/:id/status",
   requireAdmin,
   csrfCheck,
   (req, res) => {
-    const status = String(req.body.status || "");
+    const status = String(
+      req.body.status || ""
+    );
 
     if (!["APPROVED", "REJECTED"].includes(status)) {
       return res.status(400).json({
@@ -755,18 +807,18 @@ app.post(
       ? db.prepare(
           UPDATE orders
           SET
-            status='APPROVED',
-            reviewed_at=CURRENT_TIMESTAMP,
-            paid_at=COALESCE(paid_at,CURRENT_TIMESTAMP)
-          WHERE id=?
+            status = 'APPROVED',
+            reviewed_at = CURRENT_TIMESTAMP,
+            paid_at = COALESCE(paid_at, CURRENT_TIMESTAMP)
+          WHERE id = ?
         ).run(req.params.id)
       : db.prepare(
           UPDATE orders
           SET
-            status='REJECTED',
-            reviewed_at=CURRENT_TIMESTAMP,
-            paid_at=NULL
-          WHERE id=?
+            status = 'REJECTED',
+            reviewed_at = CURRENT_TIMESTAMP,
+            paid_at = NULL
+          WHERE id = ?
         ).run(req.params.id);
 
     if (!result.changes) {
@@ -781,17 +833,14 @@ app.post(
   }
 );
 
-/* =========================
-   ADMIN DELETE ORDER
-========================= */
-
+// DELETE ORDER
 app.delete(
   "/api/admin/orders/:id",
   requireAdmin,
   csrfCheck,
   (req, res) => {
     const row = db.prepare(
-      "SELECT proof_filename FROM orders WHERE id=?"
+      "SELECT proof_filename FROM orders WHERE id = ?"
     ).get(req.params.id);
 
     if (!row) {
@@ -801,7 +850,7 @@ app.delete(
     }
 
     db.prepare(
-      "DELETE FROM orders WHERE id=?"
+      "DELETE FROM orders WHERE id = ?"
     ).run(req.params.id);
 
     safeDelete(row.proof_filename);
@@ -812,10 +861,8 @@ app.delete(
   }
 );
 
-/* =========================
-   ADMIN WEBSITE SETTINGS
-========================= */
-
+// ADMIN SETTINGS
+// Package prices are fixed on the server and cannot be changed by the browser.
 app.put(
   "/api/admin/settings",
   requireAdmin,
@@ -830,7 +877,7 @@ app.put(
       if (req.file) safeDelete(req.file.filename);
 
       return res.status(400).json({
-        error: "Enter a valid website name."
+        error: "Enter a valid site name."
       });
     }
 
@@ -872,17 +919,19 @@ app.put(
   }
 );
 
-/* =========================
-   ADMIN CHANGE PASSWORD
-========================= */
-
+// CHANGE ADMIN PASSWORD
 app.post(
   "/api/admin/change-password",
   requireAdmin,
   csrfCheck,
   async (req, res) => {
-    const current = String(req.body.currentPassword || "");
-    const next = String(req.body.newPassword || "");
+    const current = String(
+      req.body.currentPassword || ""
+    );
+
+    const next = String(
+      req.body.newPassword || ""
+    );
 
     if (next.length < 12 || next.length > 200) {
       return res.status(400).json({
@@ -891,61 +940,6 @@ app.post(
     }
 
     const admin = db.prepare(
-      "SELECT * FROM admins WHERE id=?"
+      "SELECT * FROM admins WHERE id = ?"
     ).get(req.session.adminId);
-
-    if (!await bcrypt.compare(current, admin.password_hash)) {
-      return res.status(400).json({
-        error: "Current password is incorrect."
-      });
-    }
-const hash = await bcrypt.hash(next, 12);
-
-    db.prepare(
-      "UPDATE admins SET password_hash=? WHERE id=?"
-    ).run(hash, req.session.adminId);
-
-    res.json({
-      message: "Password changed. Please log in again."
-    });
-  }
-);
-
-/* =========================
-   STATIC PAGES AND SERVER
-========================= */
-
-app.get(
-  "/admin.html",
-  requireAdmin,
-  (_req, res) => {
-    res.sendFile(path.join(ROOT, "public", "admin.html"));
-  }
-);
-
-app.use(express.static(
-  path.join(ROOT, "public"),
-  { extensions: ["html"] }
-));
-
-app.use((err, req, res, _next) => {
-  console.error(err.message);
-
-  if (err instanceof multer.MulterError) {
-    return res.status(400).json({
-      error: err.code === "LIMIT_FILE_SIZE"
-        ? "Image must be 5 MB or smaller."
-        : "Upload failed."
-    });
-  }
-
-  if (err) {
-    return res.status(400).json({
-      error: err.message || "Request failed."
-    });
-  }
-});
-
-app.listen(PORT, () => {
-  console.log(H2WO STORE running on port ${PORT});
-});
+if (!admin || !await
