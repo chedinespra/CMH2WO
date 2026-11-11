@@ -15,16 +15,21 @@
 </header>
 
 <main class="container">
-  <section class="hero">
+
+  <!-- HOME PAGE -->
+  <section id="homePage" class="hero">
     <p class="eyebrow">PREMIUM GAMING ACCESS</p>
     <h1>WELCOME TO<br><span>H2WO STORE</span></h1>
     <p class="subtitle">Fast • Secure • Reliable</p>
-    <a href="#order" class="primary-btn">ORDER NOW</a>
+    <button type="button" id="startOrder" class="primary-btn">
+      ORDER NOW
+    </button>
   </section>
 
-  <section class="panel" id="order">
-    <h2>PLACE YOUR ORDER</h2>
-    <p class="muted">Choose your package below.</p>
+  <!-- PACKAGE PAGE -->
+  <section id="packagePage" class="panel" hidden>
+    <h2>SELECT YOUR PACKAGE</h2>
+    <p class="muted">Choose your device and duration.</p>
 
     <form id="orderForm">
       <label>Username / Game ID</label>
@@ -51,34 +56,62 @@
         <strong id="price">₱200</strong>
       </div>
 
-      <h3>GCash Payment</h3>
-      <div id="qrContainer">
-        <p class="muted">Loading payment QR...</p>
-      </div>
-
-      <label>GCash Reference Number</label>
-      <input name="referenceNumber" required placeholder="Enter reference number">
-
-      <label>Upload Payment Screenshot</label>
-      <input type="file" name="proof" accept="image/*" required>
-
-      <button type="submit" id="submitBtn">SUBMIT ORDER</button>
+      <button type="button" id="continuePayment" class="primary-btn">
+        CONTINUE TO PAYMENT
+      </button>
     </form>
+  </section>
+
+  <!-- PAYMENT PAGE -->
+  <section id="paymentPage" class="panel" hidden>
+    <h2>GCASH PAYMENT</h2>
+    <p class="muted">Scan the QR code below to pay.</p>
+
+    <div id="qrContainer">
+      <p class="muted">Loading payment QR...</p>
+    </div>
+
+    <div id="paymentSummary" class="price-box"></div>
+
+    <label>GCash Reference Number</label>
+    <input id="referenceNumber" placeholder="Enter reference number" required>
+
+    <label>Upload Payment Screenshot</label>
+    <input id="proof" type="file" accept="image/*" required>
+
+    <button type="button" id="submitBtn">SUBMIT PAYMENT</button>
+    <button type="button" id="backToPackage">BACK</button>
 
     <div id="result" class="result"></div>
   </section>
 
+  <!-- CONFIRMATION PAGE -->
+  <section id="confirmationPage" class="panel" hidden>
+    <h2>ORDER SUBMITTED</h2>
+    <p>Your order has been received.</p>
+    <p>Order ID:</p>
+    <strong id="confirmationOrderId"></strong>
+    <p>Status: PENDING</p>
+
+    <button type="button" id="trackOrderBtn">TRACK ORDER</button>
+    <a href="https://t.me/CMH2WO" target="_blank">CONTACT ADMIN</a>
+  </section>
+
+  <!-- TRACKING -->
   <section class="panel">
     <h2>TRACK YOUR ORDER</h2>
     <input id="trackId" placeholder="Enter your Order ID">
     <button type="button" id="trackBtn">TRACK ORDER</button>
     <div id="trackResult"></div>
   </section>
+
 </main>
 
 <footer>
   <p>© 2026 H2WO STORE. All rights reserved.</p>
-  <a id="groupLink" href="https://t.me/+jomXsgOkv9NkMTBl" target="_blank">JOIN TELEGRAM GROUP</a>
+  <a id="groupLink" href="https://t.me/+jomXsgOkv9NkMTBl" target="_blank">
+    JOIN TELEGRAM GROUP
+  </a>
 </footer>
 
 <script src="/app.js"></script>
