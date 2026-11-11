@@ -944,13 +944,8 @@ app.post(
   requireAdmin,
   csrfCheck,
   async (req, res) => {
-    const current = String(
-      req.body.currentPassword || ""
-    );
-
-    const next = String(
-      req.body.newPassword || ""
-    );
+    const current = String(req.body.currentPassword || "");
+    const next = String(req.body.newPassword || "");
 
     if (next.length < 12 || next.length > 200) {
       return res.status(400).json({
@@ -961,24 +956,25 @@ app.post(
     const admin = db.prepare(
       "SELECT * FROM admins WHERE id = ?"
     ).get(req.session.adminId);
-if (
-  !admin ||
-  !(await bcrypt.compare(current, admin.password_hash))
-) {
-  return res.status(400).json({
-    error: "Current password is incorrect."
-  });
-}
 
-const hash = await bcrypt.hash(next, 12);
+    if (
+      !admin ||
+      !(await bcrypt.compare(current, admin.password_hash))
+    ) {
+      return res.status(400).json({
+        error: "Current password is incorrect."
+      });
+    }
 
-db.prepare(
-  "UPDATE admins SET password_hash = ? WHERE id = ?"
-).run(hash, req.session.adminId);
+    const hash = await bcrypt.hash(next, 12);
 
-res.json({
-  message: "Admin password updated."
-});
+    db.prepare(
+      "UPDATE admins SET password_hash = ? WHERE id = ?"
+    ).run(hash, req.session.adminId);
+
+    res.json({
+      message: "Admin password updated."
+    });
   }
 );
 
