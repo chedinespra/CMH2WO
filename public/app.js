@@ -2,6 +2,11 @@ let csrf = "";
 let currentOrder = null;
 let publicData = null;
 
+let pollTimer = null;
+let activeOrderId = null;
+
+const ORDER_KEY = "h2wo_last_order";
+
 const $ = id => document.getElementById(id);
 
 async function api(url, options = {}) {
@@ -22,9 +27,14 @@ async function refreshCsrf() {
 
 function toast(message) {
   const el = $("toast");
+  if (!el) return;
+
   el.textContent = message;
   el.classList.add("show");
-  setTimeout(() => el.classList.remove("show"), 3000);
+
+  setTimeout(() => {
+    el.classList.remove("show");
+  }, 3000);
 }
 
 function money(n) {
@@ -34,13 +44,15 @@ function money(n) {
   });
 }
 
-/* ===== DEVICE AND DURATION PRICING ===== */
+/* =================================
+   DEVICE AND DURATION PRICING
+================================= */
 
 function updateDurations() {
   if (!publicData) return;
 
   const deviceCount = $("deviceCount").value;
-  const prices = publicData.prices[deviceCount];
+  const prices = publicData.prices?.[deviceCount];
   const daysSelect = $("days");
 
   daysSelect.innerHTML = "";
@@ -69,13 +81,15 @@ function updatePrice() {
   const deviceCount = $("deviceCount").value;
   const days = $("days").value;
 
-  const price = publicData.prices[deviceCount]?.[days];
+  const price = publicData.prices?.[deviceCount]?.[days];
 
   $("price").textContent =
     price !== undefined ? money(price) : "—";
 }
 
-/* ===== LOAD PUBLIC SETTINGS ===== */
+/* =================================
+   PUBLIC SETTINGS
+================================= */
 
 async function loadPublic() {
   publicData = await api("/api/public");
@@ -83,14 +97,19 @@ async function loadPublic() {
   $("brandName").textContent = publicData.siteName;
   $("footerName").textContent = publicData.siteName;
 
-  document.title = publicData.siteName + " — Payment Portal";
+  document.title =
+    publicData.siteName + " — Payment Portal";
 
   updateDurations();
   setContact(publicData.contactUrl);
 
   if (publicData.qrUrl) {
-    $("qrFrame").innerHTML =
-      <img src="${publicData.qrUrl}" alt="GCash QR code">;
+    const img = document.createElement("img");
+
+    img.src = publicData.qrUrl;
+    img.alt = "GCash QR code";
+
+    $("qrFrame").replaceChildren(img);
 
     $("downloadQr").href = publicData.qrUrl;
     $("downloadQr").classList.remove("hidden");
@@ -107,10 +126,16 @@ $("days").addEventListener("change", updatePrice);
 
 $("year").textContent = new Date().getFullYear();
 
-/* ===== CREATE ORDER ===== */
+/* =================================
+   CREATE ORDER
+================================= */
 
 $("orderForm").addEventListener("submit", async e => {
   e.preventDefault();
+
+  if (!publicData) {
+    return toast("Please wait. Loading prices...");
+  }
 
   const username = $("username").value.trim();
   const deviceCount = $("deviceCount").value;
@@ -120,7 +145,7 @@ $("orderForm").addEventListener("submit", async e => {
     return toast("Enter your in-game username.");
   }
 
-  const price = publicData?.prices[deviceCount]?.[days];
+  const price = publicData.prices?.[deviceCount]?.[days];
 
   if (price === undefined) {
     return toast("Invalid device package or duration.");
@@ -148,14 +173,15 @@ $("orderForm").addEventListener("submit", async e => {
 
   $("orderPanel").classList.add("hidden");
   $("paymentPanel").classList.remove("hidden");
-
-  window.scrollTo({
+window.scrollTo({
     top: $("paymentPanel").offsetTop - 20,
     behavior: "smooth"
   });
 });
 
-/* ===== SUBMIT PAYMENT PROOF ===== */
+/* =================================
+   SUBMIT PAYMENT PROOF
+================================= */
 
 $("proofForm").addEventListener("submit", async e => {
   e.preventDefault();
@@ -169,7 +195,8 @@ $("proofForm").addEventListener("submit", async e => {
   if (!file) {
     return toast("Upload your payment screenshot.");
   }
-if (!["image/jpeg", "image/png"].includes(file.type)) {
+
+  if (!["image/jpeg", "image/png"].includes(file.type)) {
     return toast("Only JPG and PNG are accepted.");
   }
 
@@ -188,7 +215,7 @@ if (!["image/jpeg", "image/png"].includes(file.type)) {
   const button = $("proofForm").querySelector("button");
 
   button.disabled = true;
-  button.textContent = "SUBMITTING…";
+  button.textContent = "SUBMITTING...";
 
   try {
     await refreshCsrf();
@@ -212,16 +239,23 @@ if (!["image/jpeg", "image/png"].includes(file.type)) {
 
   } catch (err) {
     toast(err.message);
+
     button.disabled = false;
-    button.innerHTML = 'SUBMIT PAYMENT PROOF <span>→</span>';
+    button.innerHTML =
+      'SUBMIT PAYMENT PROOF <span>→</span>';
   }
 });
 
-/* ===== ADMIN LOGIN ===== */
+/* =================================
+   ADMIN LOGIN
+================================= */
 
 $("showAdmin").addEventListener("click", () => {
   $("adminLoginPanel").classList.remove("hidden");
-  $("adminLoginPanel").scrollIntoView({ behavior: "smooth" });
+
+  $("adminLoginPanel").scrollIntoView({
+    behavior: "smooth"
+  });
 });
 
 $("closeAdmin").addEventListener("click", () => {
@@ -247,6 +281,7 @@ $("adminLoginForm").addEventListener("submit", async e => {
     });
 
     csrf = d.token;
+
     location.href = "/admin.html";
 
   } catch (err) {
@@ -254,18 +289,18 @@ $("adminLoginForm").addEventListener("submit", async e => {
   }
 });
 
-/* ===== PAYMENT STATUS + RECEIPT ===== */
-
-let pollTimer = null;
-let activeOrderId = null;
-
-const ORDER_KEY = "h2wo_last_order";
+/* =================================
+   ORDER STORAGE
+================================= */
 
 function rememberOrder(id) {
   try {
     localStorage.setItem(
       ORDER_KEY,
-      JSON.stringify({ id, t: Date.now() })
+      JSON.stringify({
+        id,
+        t: Date.now()
+      })
     );
   } catch (_) {}
 }
@@ -275,6 +310,10 @@ function forgetOrder() {
     localStorage.removeItem(ORDER_KEY);
   } catch (_) {}
 }
+
+/* =================================
+   CONTACT ADMIN
+================================= */
 
 function setContact(url) {
   document.querySelectorAll(".contact-admin").forEach(a => {
@@ -287,6 +326,10 @@ function setContact(url) {
   });
 }
 
+/* =================================
+   PAYMENT STATUS
+================================= */
+
 function stopPolling() {
   if (pollTimer) {
     clearInterval(pollTimer);
@@ -295,8 +338,12 @@ function stopPolling() {
 }
 
 function showBox(id) {
-  ["statusPending", "statusSuccess", "statusRejected"].forEach(b => {
-    $(b).classList.toggle("hidden", b !== id);
+  [
+    "statusPending",
+    "statusSuccess",
+    "statusRejected"
+  ].forEach(box => {
+    $(box).classList.toggle("hidden", box !== id);
   });
 }
 
@@ -309,12 +356,41 @@ async function fetchReceipt() {
 async function refreshStatus() {
   if (!activeOrderId) return;
 
-  let s;
-
   try {
-    s = await api(
+    const s = await api(
       /api/orders/${encodeURIComponent(activeOrderId)}/status
     );
+
+    if (s.paid) {
+      stopPolling();
+      showBox("statusSuccess");
+
+      try {
+        const r = await fetchReceipt();
+
+        await H2WOReceipt.render(
+          r,
+          $("receiptCanvas")
+        );
+} catch (err) {
+        toast(err.message);
+      }
+
+    } else if (s.status === "REJECTED") {
+      stopPolling();
+
+      $("rejectedTx").textContent =
+        s.transactionId || "";
+
+      showBox("statusRejected");
+
+    } else {
+      $("pendingTx").textContent =
+        s.transactionId || "";
+
+      showBox("statusPending");
+    }
+
   } catch (err) {
     if (/order not found/i.test(err.message)) {
       stopPolling();
@@ -323,52 +399,37 @@ async function refreshStatus() {
     } else {
       console.warn("Status check failed:", err.message);
     }
-
-    return;
-  }
-
-  if (s.paid) {
-    stopPolling();
-    showBox("statusSuccess");
-
-    try {
-      const r = await fetchReceipt();
-      await H2WOReceipt.render(r, $("receiptCanvas"));
-    } catch (err) {
-      toast(err.message);
-    }
-
-  } else if (s.status === "REJECTED") {
-    stopPolling();
-    $("rejectedTx").textContent = s.transactionId || "";
-    showBox("statusRejected");
-
-  } else {
-    $("pendingTx").textContent = s.transactionId || "";
-    showBox("statusPending");
   }
 }
 
 function showStatus(orderId) {
   activeOrderId = orderId;
+
   stopPolling();
 
   $("orderPanel").classList.add("hidden");
   $("paymentPanel").classList.add("hidden");
   $("statusPanel").classList.remove("hidden");
 
+  showBox("statusPending");
+
   window.scrollTo({
     top: 0,
     behavior: "smooth"
   });
-showBox("statusPending");
 
   refreshStatus();
+
   pollTimer = setInterval(refreshStatus, 8000);
 }
 
+/* =================================
+   RESET ORDER
+================================= */
+
 function resetToOrder() {
   stopPolling();
+
   activeOrderId = null;
   currentOrder = null;
 
@@ -378,26 +439,34 @@ function resetToOrder() {
 
   $("proofForm").reset();
   $("proofForm").classList.remove("hidden");
+
   $("successMessage").classList.add("hidden");
 
-  const b = $("proofForm").querySelector("button");
+  const button = $("proofForm").querySelector("button");
 
-  b.disabled = false;
-  b.innerHTML = 'SUBMIT PAYMENT PROOF <span>→</span>';
+  button.disabled = false;
+  button.innerHTML =
+    'SUBMIT PAYMENT PROOF <span>→</span>';
 
   $("orderForm").reset();
+
   $("deviceCount").value = "1";
+
   updateDurations();
 }
 
-/* ===== DOWNLOAD RECEIPT ===== */
+/* =================================
+   DOWNLOAD RECEIPT
+================================= */
 
 $("downloadReceipt").addEventListener("click", async () => {
-  const btn = $("downloadReceipt");
-  btn.disabled = true;
+  const button = $("downloadReceipt");
+
+  button.disabled = true;
 
   try {
     const r = await fetchReceipt();
+
     const canvas = await H2WOReceipt.render(
       r,
       $("receiptCanvas")
@@ -409,20 +478,26 @@ $("downloadReceipt").addEventListener("click", async () => {
     toast(err.message);
 
   } finally {
-    btn.disabled = false;
+    button.disabled = false;
   }
 });
 
-/* ===== NEW ORDER ===== */
+/* =================================
+   NEW ORDER
+================================= */
 
 $("newOrder").addEventListener("click", () => {
   forgetOrder();
   resetToOrder();
 });
 
-/* ===== INITIALIZE ===== */
+/* =================================
+   INITIALIZE
+================================= */
 
-loadPublic().catch(err => toast(err.message));
+loadPublic().catch(err => {
+  toast(err.message);
+});
 
 try {
   const saved = JSON.parse(
@@ -432,8 +507,9 @@ try {
   if (
     saved &&
     saved.id &&
-    Date.now() - saved.t < 7 * 24 * 3600 * 1000
+    Date.now() - saved.t < 7 * 24 * 60 * 60 * 1000
   ) {
     showStatus(saved.id);
   }
+
 } catch (_) {}
