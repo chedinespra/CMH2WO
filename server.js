@@ -1,4 +1,3 @@
-𝐂𝐌 𝐇2𝐖𝐎, [12.11.2026 06:30]
 require("dotenv").config();
 
 const express = require("express");
