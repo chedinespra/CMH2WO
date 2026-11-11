@@ -14,6 +14,7 @@ const crypto = require("crypto");
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
+
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, "data");
 const UPLOAD_DIR = path.join(ROOT, "uploads");
@@ -36,6 +37,7 @@ if (isProd && !process.env.APP_ORIGIN) {
 
 // DATABASE
 const db = new Database(path.join(DATA_DIR, "site.sqlite"));
+
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
 
@@ -46,7 +48,6 @@ db.exec(
     password_hash TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
-);
 
   CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
@@ -67,54 +68,26 @@ db.exec(
   );
 );
 
-  CREATE TABLE IF NOT EXISTS settings (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-  );
-
-  CREATE TABLE IF NOT EXISTS orders (
-    id TEXT PRIMARY KEY,
-    username TEXT NOT NULL,
-    days INTEGER NOT NULL,
-    amount_cents INTEGER NOT NULL,
-    reference_number TEXT,
-    proof_filename TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'PENDING'
-      CHECK(status IN ('PENDING','APPROVED','REJECTED')),
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    reviewed_at TEXT
-  );
-);
-
-// ADDITIVE MIGRATIONS
-const columns = db.prepare("PRAGMA table_info(orders)").all().map(c => c.name);
+// ADDITIVE DATABASE MIGRATIONS
+const columns = db
+  .prepare("PRAGMA table_info(orders)")
+  .all()
+  .map(column => column.name);
 
 if (!columns.includes("transaction_id")) {
   db.exec("ALTER TABLE orders ADD COLUMN transaction_id TEXT");
 }
+
 if (!columns.includes("paid_at")) {
   db.exec("ALTER TABLE orders ADD COLUMN paid_at TEXT");
 }
+
 if (!columns.includes("payment_method")) {
   db.exec("ALTER TABLE orders ADD COLUMN payment_method TEXT NOT NULL DEFAULT 'GCash'");
 }
+
 if (!columns.includes("device_count")) {
   db.exec("ALTER TABLE orders ADD COLUMN device_count INTEGER NOT NULL DEFAULT 1");
-}
-
-const defaults = {
-  siteName: "H2WO STORE",
-  contactUrl: "https://t.me/CMH2WO",
-  groupUrl: "https://t.me/+jomXsgOkv9NkMTBl",
-  qrFilename: ""
-};
-
-const insertSetting = db.prepare(
-  "INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)"
-);
-
-for (const [key, value] of Object.entries(defaults)) {
-  insertSetting.run(key, value);
 }
 
 function makeTransactionId() {
@@ -123,7 +96,9 @@ function makeTransactionId() {
 
   do {
     id = H2WO-${date}-${crypto.randomBytes(5).toString("hex").toUpperCase()};
-  } while (db.prepare("SELECT 1 FROM orders WHERE transaction_id=?").get(id));
+  } while (
+    db.prepare("SELECT 1 FROM orders WHERE transaction_id=?").get(id)
+  );
 
   return id;
 }
@@ -145,6 +120,21 @@ db.exec(
   SET paid_at = COALESCE(reviewed_at, created_at)
   WHERE status='APPROVED' AND paid_at IS NULL;
 );
+
+const defaults = {
+  siteName: "H2WO STORE",
+  contactUrl: "https://t.me/CMH2WO",
+  groupUrl: "https://t.me/+jomXsgOkv9NkMTBl",
+  qrFilename: ""
+};
+
+const insertSetting = db.prepare(
+  "INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)"
+);
+
+for (const [key, value] of Object.entries(defaults)) {
+  insertSetting.run(key, value);
+}
 
 // PRICES IN PESOS
 const PRICES = {
@@ -173,16 +163,13 @@ const PRICES = {
 // SECURITY AND MIDDLEWARE
 app.disable("x-powered-by");
 app.set("trust proxy", isProd ? 1 : false);
-Telegram
-𝐂𝐌 𝐇2𝐖𝐎
-VIEW MESSAGE
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:"],
+      imgSrc: ["'self'", "data:", "blob:"],
       connectSrc: ["'self'"],
       objectSrc: ["'none'"],
       baseUri: ["'self'"],
@@ -236,7 +223,9 @@ const statusLimiter = rateLimit({
 // IMAGE UPLOAD
 const upload = multer({
   storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
+    destination: (_req, _file, cb) => {
+      cb(null, UPLOAD_DIR);
+    },
     filename: (_req, file, cb) => {
       const ext = file.mimetype === "image/png" ? ".png" : ".jpg";
       cb(null, ${crypto.randomUUID()}${ext});
@@ -257,10 +246,11 @@ const upload = multer({
   }
 });
 
-// HELPERS
+// HELPER FUNCTIONS
 function getSettings() {
   return Object.fromEntries(
-    db.prepare("SELECT key,value FROM settings").all()
+    db.prepare("SELECT key,value FROM settings")
+      .all()
       .map(row => [row.key, row.value])
   );
 }
@@ -276,6 +266,7 @@ function csrfToken(req) {
   if (!req.session.csrfToken) {
     req.session.csrfToken = crypto.randomBytes(32).toString("hex");
   }
+
   return req.session.csrfToken;
 }
 
@@ -297,8 +288,11 @@ function csrfCheck(req, res, next) {
 
 function requireAdmin(req, res, next) {
   if (!req.session.adminId) {
-    return res.status(401).json({ error: "Admin login required." });
+    return res.status(401).json({
+      error: "Admin login required."
+    });
   }
+
   next();
 }
 
@@ -313,7 +307,8 @@ function safeDelete(filename) {
 }
 
 function findOrder(id) {
-  return db.prepare("SELECT * FROM orders WHERE id=?").get(String(id)) || null;
+  return db.prepare("SELECT * FROM orders WHERE id=?")
+    .get(String(id)) || null;
 }
 
 function publicOrder(row) {
@@ -334,25 +329,24 @@ function publicOrder(row) {
 
 // PUBLIC API
 app.get("/api/csrf", (req, res) => {
-  res.json({ token: csrfToken(req) });
+  const token = csrfToken(req);
+  res.json({ token, csrfToken: token });
 });
 
-app.get("/api/public", (req, res) => {
+app.get("/api/public", (_req, res) => {
   const settings = getSettings();
   const qrFile = settings.qrFilename
     ? path.join(UPLOAD_DIR, path.basename(settings.qrFilename))
     : null;
-
-  res.json({
+res.json({
     siteName: settings.siteName || "H2WO STORE",
     prices: PRICES,
     contactUrl: settings.contactUrl || "",
     groupUrl: settings.groupUrl || "",
-    qrUrl: qrFile && fs.existsSync(qrFile)
-      ? "/api/qr"
-      : null
+    qrUrl: qrFile && fs.existsSync(qrFile) ? "/api/qr" : null
   });
 });
+
 // CREATE ORDER
 app.post(
   "/api/orders",
@@ -364,7 +358,9 @@ app.post(
       const username = String(req.body.username || "").trim();
       const devices = Number(req.body.devices || req.body.deviceCount);
       const days = Number(req.body.days);
-      const reference = String(req.body.referenceNumber || "").trim().slice(0, 80);
+      const reference = String(req.body.referenceNumber || "")
+        .trim()
+        .slice(0, 80);
 
       if (
         !username ||
@@ -372,16 +368,22 @@ app.post(
         !/^[\p{L}\p{N} _.@-]+$/u.test(username)
       ) {
         if (req.file) safeDelete(req.file.filename);
-        return res.status(400).json({ error: "Enter a valid username." });
+        return res.status(400).json({
+          error: "Enter a valid username."
+        });
       }
 
       if (!PRICES[devices] || !PRICES[devices][days]) {
         if (req.file) safeDelete(req.file.filename);
-        return res.status(400).json({ error: "Invalid device or package selection." });
+        return res.status(400).json({
+          error: "Invalid device or package selection."
+        });
       }
 
       if (!req.file) {
-        return res.status(400).json({ error: "Upload your payment screenshot." });
+        return res.status(400).json({
+          error: "Upload your payment screenshot."
+        });
       }
 
       const amountCents = PRICES[devices][days] * 100;
@@ -411,8 +413,10 @@ app.post(
       });
     } catch (err) {
       if (req.file) safeDelete(req.file.filename);
-      console.error(err);
-      res.status(500).json({ error: "Unable to submit order." });
+      console.error("Order submission error:", err);
+      res.status(500).json({
+        error: "Unable to submit order."
+      });
     }
   }
 );
@@ -430,7 +434,7 @@ app.get("/api/orders/:id/status", statusLimiter, (req, res) => {
   res.json({
     status: order.status,
     paid: order.status === "APPROVED" && !!order.paid_at,
-    transactionId: order.transaction_id
+    transactionId: order.transaction_id || ""
   });
 });
 
@@ -468,7 +472,7 @@ app.get("/api/orders/:id/receipt", statusLimiter, (req, res) => {
 });
 
 // GCash QR IMAGE
-app.get("/api/qr", (req, res) => {
+app.get("/api/qr", (_req, res) => {
   const filename = getSettings().qrFilename;
 
   if (!filename) return res.status(404).end();
@@ -480,7 +484,6 @@ app.get("/api/qr", (req, res) => {
   res.setHeader("Cache-Control", "no-store");
   res.sendFile(file);
 });
-
 // ADMIN LOGIN
 app.post("/api/admin/login", loginLimiter, csrfCheck, async (req, res) => {
   const username = String(req.body.username || "").trim();
@@ -490,22 +493,38 @@ app.post("/api/admin/login", loginLimiter, csrfCheck, async (req, res) => {
     "SELECT * FROM admins WHERE username=?"
   ).get(username);
 
-  const valid = admin && await bcrypt.compare(password, admin.password_hash);
+  const valid = admin && await bcrypt.compare(
+    password,
+    admin.password_hash
+  );
 
   if (!valid) {
-    return res.status(401).json({ error: "Invalid username or password." });
+    return res.status(401).json({
+      error: "Invalid username or password."
+    });
   }
-req.session.regenerate(err => {
+
+  req.session.regenerate(err => {
     if (err) {
-      return res.status(500).json({ error: "Could not create session." });
+      return res.status(500).json({
+        error: "Could not create session."
+      });
     }
 
     req.session.adminId = admin.id;
     req.session.csrfToken = crypto.randomBytes(32).toString("hex");
 
-    res.json({
-      message: "Logged in.",
-      token: req.session.csrfToken
+    req.session.save(saveError => {
+      if (saveError) {
+        return res.status(500).json({
+          error: "Could not save admin session."
+        });
+      }
+
+      res.json({
+        message: "Logged in.",
+        token: req.session.csrfToken
+      });
     });
   });
 });
@@ -515,7 +534,9 @@ app.get("/api/admin/me", requireAdmin, (req, res) => {
     "SELECT username FROM admins WHERE id=?"
   ).get(req.session.adminId);
 
-  if (!admin) return res.status(401).json({ error: "Admin not found." });
+  if (!admin) {
+    return res.status(401).json({ error: "Admin not found." });
+  }
 
   res.json({
     username: admin.username,
@@ -539,7 +560,7 @@ app.get("/api/admin/orders", requireAdmin, (req, res) => {
   res.json(rows.map(publicOrder));
 });
 
-app.get("/api/admin/stats", requireAdmin, (req, res) => {
+app.get("/api/admin/stats", requireAdmin, (_req, res) => {
   const counts = db.prepare(
     SELECT
       COUNT(*) AS total,
@@ -580,49 +601,64 @@ app.get("/api/admin/proofs/:filename", requireAdmin, (req, res) => {
 });
 
 // APPROVE OR REJECT ORDER
-app.post("/api/admin/orders/:id/status", requireAdmin, csrfCheck, (req, res) => {
-  const status = String(req.body.status || "");
+app.post(
+  "/api/admin/orders/:id/status",
+  requireAdmin,
+  csrfCheck,
+  (req, res) => {
+    const status = String(req.body.status || "");
 
-  if (!["APPROVED", "REJECTED"].includes(status)) {
-    return res.status(400).json({ error: "Invalid status." });
+    if (!["APPROVED", "REJECTED"].includes(status)) {
+      return res.status(400).json({ error: "Invalid status." });
+    }
+
+    const order = findOrder(req.params.id);
+
+    if (!order) {
+      return res.status(404).json({ error: "Order not found." });
+    }
+
+    if (status === "APPROVED") {
+      db.prepare(
+        UPDATE orders
+        SET status='APPROVED',
+            reviewed_at=CURRENT_TIMESTAMP,
+            paid_at=COALESCE(paid_at,CURRENT_TIMESTAMP)
+        WHERE id=?
+      ).run(order.id);
+    } else {
+      db.prepare(
+        UPDATE orders
+        SET status='REJECTED',
+            reviewed_at=CURRENT_TIMESTAMP,
+            paid_at=NULL
+        WHERE id=?
+      ).run(order.id);
+    }
+
+    res.json({
+      message: Order ${status.toLowerCase()}.
+    });
   }
-
-  const order = findOrder(req.params.id);
-
-  if (!order) return res.status(404).json({ error: "Order not found." });
-
-  if (status === "APPROVED") {
-    db.prepare(
-      UPDATE orders
-      SET status='APPROVED',
-          reviewed_at=CURRENT_TIMESTAMP,
-          paid_at=COALESCE(paid_at,CURRENT_TIMESTAMP)
-      WHERE id=?
-    ).run(order.id);
-  } else {
-    db.prepare(
-      UPDATE orders
-      SET status='REJECTED',
-          reviewed_at=CURRENT_TIMESTAMP,
-          paid_at=NULL
-      WHERE id=?
-    ).run(order.id);
-  }
-
-  res.json({ message: Order ${status.toLowerCase()}. });
-});
+);
 
 // DELETE ORDER
-app.delete("/api/admin/orders/:id", requireAdmin, csrfCheck, (req, res) => {
-  const order = findOrder(req.params.id);
+app.delete(
+  "/api/admin/orders/:id",
+  requireAdmin,
+  csrfCheck,
+  (req, res) => {
+    const order = findOrder(req.params.id);
 
-  if (!order) return res.status(404).json({ error: "Order not found." });
+    if (!order) {
+      return res.status(404).json({ error: "Order not found." });
+    }
+db.prepare("DELETE FROM orders WHERE id=?").run(order.id);
+    safeDelete(order.proof_filename);
 
-  db.prepare("DELETE FROM orders WHERE id=?").run(order.id);
-  safeDelete(order.proof_filename);
-
-  res.json({ message: "Order deleted." });
-});
+    res.json({ message: "Order deleted." });
+  }
+);
 
 // ADMIN SETTINGS AND QR UPLOAD
 app.put(
@@ -631,26 +667,40 @@ app.put(
   csrfCheck,
   upload.single("qr"),
   (req, res) => {
-    const siteName = String(req.body.siteName || "H2WO STORE").trim().slice(0, 50);
+    const siteName = String(req.body.siteName || "H2WO STORE")
+      .trim()
+      .slice(0, 50);
+
     const contactUrl = String(req.body.contactUrl || "").trim();
     const groupUrl = String(req.body.groupUrl || "").trim();
 
     const validUrl = value =>
       !value || /^https:\/\/[^\s<>"']{3,200}$/i.test(value);
 
-    if (!siteName  !validUrl(contactUrl)  !validUrl(groupUrl)) {
+    if (
+      !siteName ||
+      !validUrl(contactUrl) ||
+      !validUrl(groupUrl)
+    ) {
       if (req.file) safeDelete(req.file.filename);
-      return res.status(400).json({ error: "Check the store name and links." });
+
+      return res.status(400).json({
+        error: "Check the store name and links."
+      });
     }
 
     const oldQr = getSettings().qrFilename;
-setSetting("siteName", siteName);
+
+    setSetting("siteName", siteName);
     setSetting("contactUrl", contactUrl);
     setSetting("groupUrl", groupUrl);
 
     if (req.file) {
       setSetting("qrFilename", req.file.filename);
-      if (oldQr && oldQr !== req.file.filename) safeDelete(oldQr);
+
+      if (oldQr && oldQr !== req.file.filename) {
+        safeDelete(oldQr);
+      }
     }
 
     res.json({ message: "Settings saved." });
@@ -677,7 +727,9 @@ app.post(
     ).get(req.session.adminId);
 
     if (!admin || !(await bcrypt.compare(current, admin.password_hash))) {
-      return res.status(400).json({ error: "Current password is incorrect." });
+      return res.status(400).json({
+        error: "Current password is incorrect."
+      });
     }
 
     const hash = await bcrypt.hash(next, 12);
@@ -690,11 +742,13 @@ app.post(
   }
 );
 
-// ADMIN PAGE
+// ADMIN PAGE - PUBLIC LOGIN PAGE
 app.get("/admin.html", (_req, res) => {
   const adminFile = path.join(PUBLIC_DIR, "admin.html");
 
-  if (!fs.existsSync(adminFile)) return res.status(404).send("Admin page not created yet.");
+  if (!fs.existsSync(adminFile)) {
+    return res.status(404).send("Admin page not created yet.");
+  }
 
   res.sendFile(adminFile);
 });
