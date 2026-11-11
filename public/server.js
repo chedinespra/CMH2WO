@@ -298,7 +298,7 @@ const statusLimiter = rateLimit({
   legacyHeaders: false
 });
 
-// MIDDLEWARE
+// IMAGE UPLOAD
 const upload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => {
