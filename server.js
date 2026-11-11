@@ -942,4 +942,50 @@ app.post(
     const admin = db.prepare(
       "SELECT * FROM admins WHERE id = ?"
     ).get(req.session.adminId);
-if (!admin || !await
+if (
+  !admin ||
+  !(await bcrypt.compare(current, admin.password_hash))
+) {
+  return res.status(400).json({
+    error: "Current password is incorrect."
+  });
+}
+
+const hash = await bcrypt.hash(next, 12);
+
+db.prepare(
+  "UPDATE admins SET password_hash = ? WHERE id = ?"
+).run(hash, req.session.adminId);
+
+res.json({
+  message: "Admin password updated."
+});
+  }
+);
+
+// SERVE FRONTEND FILES
+app.use(express.static(path.join(ROOT, "public")));
+
+// ERROR HANDLER
+app.use((err, req, res, next) => {
+  console.error("Server error:", err);
+
+  if (res.headersSent) {
+    return next(err);
+  }
+
+  const isUploadError =
+    err instanceof multer.MulterError ||
+    err.message === "Only JPG, JPEG, and PNG images are allowed.";
+
+  res.status(isUploadError ? 400 : 500).json({
+    error: isUploadError
+      ? err.message
+      : "Internal server error. Please try again."
+  });
+});
+
+// START SERVER
+app.listen(PORT, () => {
+  console.log(H2WO STORE running on port ${PORT});
+});
