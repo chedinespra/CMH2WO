@@ -1,78 +1,172 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#090909"><title>H2WO STORE - Gaming Payment Portal</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#090909">
+<title>H2WO STORE - Gaming Payment Portal</title>
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
 
-<!-- HAPSAY NGA DEVELOPER BAR -->
-<div style="background: linear-gradient(90deg, #050101, #1a0202); color: #ff1a1a; text-align: center; padding: 10px; font-weight: bold; font-family: 'Arial Black', sans-serif; letter-spacing: 2px; border-bottom: 2px solid #ff1a1a; font-size: 0.8rem; box-shadow: 0 2px 10px rgba(255, 26, 26, 0.2);">
-  ⚡ DEVELOPER: CHINRO ⚡
+<div style="background:linear-gradient(90deg,#050101,#1a0202);color:#ff1a1a;text-align:center;padding:10px;font-weight:bold;font-family:'Arial Black',sans-serif;letter-spacing:2px;border-bottom:2px solid #ff1a1a;font-size:.8rem;box-shadow:0 2px 10px rgba(255,26,26,.2);">
+⚡ DEVELOPER: CHINRO ⚡
 </div>
 
 <div class="ambient"></div>
 
-<!-- TOPBAR NGA NAA NAY LOGO -->
 <header class="topbar">
-  <a class="brand" href="/" style="display: flex; align-items: center; gap: 10px; text-decoration: none;">
-    <img src="/logo.jpg" alt="H2WO Logo" style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 1.5px solid #ff1a1a; box-shadow: 0 0 8px rgba(255, 26, 26, 0.5);">
-    <span id="brandName" style="color: #fff; font-weight: bold; font-family: 'Arial Black', sans-serif; letter-spacing: 1px;">CMH2WO</span>
-  </a>
-  <span class="secure-label">SECURE ORDER PORTAL</span>
+<a class="brand" href="/" style="display:flex;align-items:center;gap:10px;text-decoration:none;">
+<img src="/logo.jpg" alt="H2WO Logo" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:1.5px solid #ff1a1a;box-shadow:0 0 8px rgba(255,26,26,.5);">
+<span id="brandName" style="color:#fff;font-weight:bold;font-family:'Arial Black',sans-serif;letter-spacing:1px;">CMH2WO</span>
+</a>
+<span class="secure-label">SECURE ORDER PORTAL</span>
 </header>
 
 <main class="shell">
+
 <section class="hero">
-  <div class="eyebrow"><span class="pulse"></span> PREMIUM ACCESS PORTAL</div>
-  <!-- GI-AYOS ANG SIZE ARON DILI MAG-PATONG UG MAGKA-ATBANG -->
-  <h1 style="font-size: clamp(1.8rem, 5vw, 2.8rem); line-height: 1.2; letter-spacing: -1px;">DOMINATE THE <span style="color: #ff1a1a;">GAME TODAY.</span></h1>
-  <p>Enter your player details, choose a plan, and complete your payment securely.</p>
+<div class="eyebrow"><span class="pulse"></span> PREMIUM ACCESS PORTAL</div>
+<h1 style="font-size:clamp(1.8rem,5vw,2.8rem);line-height:1.2;letter-spacing:-1px;">DOMINATE THE <span style="color:#ff1a1a;">GAME TODAY.</span></h1>
+<p>Enter your player details, choose a plan, and complete your payment securely.</p>
 </section>
 
 <section class="panel" id="orderPanel">
-<div class="section-head"><div><span class="step">01 / ORDER DETAILS</span><h2>Create your order</h2></div><span class="live-dot">● ONLINE</span></div>
+<div class="section-head">
+<div><span class="step">01 / ORDER DETAILS</span><h2>Create your order</h2></div>
+<span class="live-dot">● ONLINE</span>
+</div>
+
 <form id="orderForm">
-<label for="username">IN-GAME USERNAME</label><input id="username" name="username" maxlength="40" placeholder="Enter your username" autocomplete="off" required>
-<label for="days">SELECT DURATION</label><select id="days" name="days"><option value="1">1 Day</option><option value="7">7 Days</option><option value="30">30 Days</option></select>
-<div class="price-preview"><span>YOUR TOTAL</span><strong id="price">₱100.00</strong></div>
+
+<label for="username">IN-GAME USERNAME</label>
+<input id="username" name="username" maxlength="40" placeholder="Enter your username" autocomplete="off" required>
+
+<label for="deviceCount">SELECT DEVICE PACKAGE</label>
+<select id="deviceCount" name="deviceCount" required>
+<option value="1">1 DEVICE</option>
+<option value="2">2 DEVICES</option>
+<option value="5">5 DEVICES</option>
+</select>
+
+<label for="days">SELECT DURATION</label>
+<select id="days" name="days" required>
+<option value="1">1 Day</option>
+<option value="7">7 Days</option>
+<option value="15">15 Days</option>
+<option value="30">30 Days</option>
+</select>
+
+<div class="price-preview">
+<span>YOUR TOTAL</span>
+<strong id="price">₱200.00</strong>
+</div>
+
 <button class="btn primary" type="submit">CONTINUE TO PAYMENT <span>→</span></button>
 </form>
 </section>
 
 <section class="panel hidden" id="paymentPanel">
-<div class="section-head"><div><span class="step">02 / PAYMENT</span><h2>Complete your payment</h2></div><span class="tag">GCASH</span></div>
+<div class="section-head">
+<div><span class="step">02 / PAYMENT</span><h2>Complete your payment</h2></div>
+<span class="tag">GCASH</span>
+</div>
 
-<!-- TELEGRAM CONTACT BUTTON -->
-<div style="margin-bottom: 20px; text-align: center;">
-  <a href="https://t.me/CMH2WO" target="_blank" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; background-color: #0088cc; color: #ffffff; padding: 12px 20px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 0.9rem; font-family: Arial, sans-serif; width: 100%; box-sizing: border-box; box-shadow: 0 0 12px rgba(0, 136, 204, 0.4);">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.2-.08-.06-.19-.04-.27-.02-.12.03-1.99 1.27-5.62 3.72-.53.36-1.01.54-1.44.53-.47-.01-1.37-.26-2.03-.48-.82-.27-1.47-.42-1.42-.88.03-.25.38-.51 1.05-.78 4.11-1.79 6.85-2.97 8.22-3.55 3.92-1.65 4.73-1.94 5.26-1.95.12 0 .39.03.56.17.14.12.18.28.2.45-.02.07-.02.13-.04.22z"/>
-    </svg>
-    MESSAGE ON TELEGRAM (@CMH2WO)
-  </a>
-  <div class="summary" id="summary"></div>
-<div class="qr-wrap"><div class="qr-frame" id="qrFrame"><div class="qr-empty">GCash QR code has not been uploaded yet.<br>Contact the administrator.</div></div><div><h3>SCAN TO PAY VIA GCASH</h3><p class="muted">Open GCash and scan this QR code. Pay the exact amount shown above.</p><a class="btn secondary" id="downloadQr" href="#" download="gcash-qr.png">↓ DOWNLOAD QR IMAGE</a></div></div>
+<div style="margin-bottom:20px;text-align:center;">
+<a href="https://t.me/CMH2WO" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;background-color:#0088cc;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:.9rem;font-family:Arial,sans-serif;width:100%;box-sizing:border-box;box-shadow:0 0 12px rgba(0,136,204,.4);">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.2-.08-.06-.19-.04-.27-.02-.12.03-1.99 1.27-5.62 3.72-.53.36-1.01.54-1.44.53-.47-.01-1.37-.26-2.03-.48-.82-.27-1.47-.42-1.42-.88.03-.25.38-.51 1.05-.78 4.11-1.79 6.85-2.97 8.22-3.55 3.92-1.65 4.73-1.94 5.26-1.95.12 0 .39.03.56.17.14.12.18.28.2.45-.02.07-.02.13-.04.22z"/>
+</svg>
+MESSAGE ON TELEGRAM (@CMH2WO)
+</a>
+</div>
+
+<div class="summary" id="summary"></div>
+Telegram
+𝐂𝐌 𝐇2𝐖𝐎
+VIEW MESSAGE
+<div class="qr-wrap">
+<div class="qr-frame" id="qrFrame">
+<div class="qr-empty">GCash QR code has not been uploaded yet.<br>Contact the administrator.</div>
+</div>
+<div>
+<h3>SCAN TO PAY VIA GCASH</h3>
+<p class="muted">Open GCash and scan this QR code. Pay the exact amount shown above.</p>
+<a class="btn secondary" id="downloadQr" href="#" download="gcash-qr.png">↓ DOWNLOAD QR IMAGE</a>
+</div>
+</div>
+
 <form id="proofForm" enctype="multipart/form-data">
-<label for="reference">GCASH REFERENCE NUMBER <span class="optional">(OPTIONAL)</span></label><input id="reference" name="referenceNumber" maxlength="80" placeholder="Enter reference number">
-<label for="proof">UPLOAD PROOF OF PAYMENT</label><input id="proof" name="proof" type="file" required><small class="hint">JPG or PNG · Maximum 5 MB</small>
+<label for="reference">GCASH REFERENCE NUMBER <span class="optional">(OPTIONAL)</span></label>
+<input id="reference" name="referenceNumber" maxlength="80" placeholder="Enter reference number">
+
+<label for="proof">UPLOAD PROOF OF PAYMENT</label>
+<input id="proof" name="proof" type="file" accept="image/jpeg,image/png" required>
+<small class="hint">JPG or PNG · Maximum 5 MB</small>
+
 <button class="btn primary" type="submit">SUBMIT PAYMENT PROOF <span>→</span></button>
 </form>
+
 <div id="successMessage" class="success hidden"></div>
 </section>
 
+<section class="panel hidden" id="statusPanel">
+
+<div class="status-box hidden" id="statusPending">
+<div class="status-icon pending">…</div>
+<h2>Payment Submitted</h2>
+<p class="muted">Your payment proof was received and is waiting for admin verification. This page updates automatically once your payment is confirmed. You can also message the admin to speed things up.</p>
+<p class="muted">Transaction ID<br><strong class="txid" id="pendingTx"></strong></p>
+<a class="btn secondary block contact-admin hidden" target="_blank" rel="noopener noreferrer">MESSAGE ADMIN ON TELEGRAM</a>
+</div>
+
+<div class="status-box hidden" id="statusSuccess">
+<div class="status-icon ok">✓</div>
+<h2>Payment Successful</h2>
+<p class="muted">Your payment has been verified. Please download your receipt and send it to the admin for verification and approval of your order.</p>
+<canvas id="receiptCanvas" class="receipt-preview" aria-label="Payment receipt preview"></canvas>
+<button class="btn primary block" id="downloadReceipt" type="button">↓ DOWNLOAD RECEIPT</button>
+<a class="btn tg block contact-admin hidden" id="contactAdmin" target="_blank" rel="noopener noreferrer">CONTACT ADMIN – SEND YOUR RECEIPT</a>
+</div>
+
+<div class="status-box hidden" id="statusRejected">
+<div class="status-icon bad">✕</div>
+<h2>Payment Not Verified</h2>
+<p class="muted">The admin could not verify this payment. Please contact the admin with your payment details.</p>
+<p class="muted">Transaction ID<br><strong class="txid" id="rejectedTx"></strong></p>
+<a class="btn tg block contact-admin hidden" target="_blank" rel="noopener noreferrer">CONTACT ADMIN</a>
+</div>
+
+<div style="text-align:center;margin-top:16px">
+<button class="text-button" id="newOrder" type="button">START A NEW ORDER</button>
+</div>
+</section>
+
 <footer>
-  <span>© <span id="year"></span> <span id="footerName">H2WO STORE</span></span>
-  <button class="admin-link" id="showAdmin">ADMIN LOGIN</button>
+<span>© <span id="year"></span> <span id="footerName">H2WO STORE</span></span>
+<button class="admin-link" id="showAdmin">ADMIN LOGIN</button>
 </footer>
 
 <section class="panel hidden" id="adminLoginPanel">
-<div class="section-head"><div><span class="step">PRIVATE ACCESS</span><h2>Administrator login</h2></div><button class="text-button" id="closeAdmin">CLOSE ✕</button></div>
-<form id="adminLoginForm"><label for="adminUser">ADMIN USERNAME</label><input id="adminUser" required autocomplete="username"><label for="adminPass">PASSWORD</label><input id="adminPass" type="password" required autocomplete="current-password"><button class="btn primary" type="submit">SIGN IN TO DASHBOARD →</button></form>
-</section>
-</main>
-<div id="toast" role="status" aria-live="polite"></div>
-<script src="/app.js" defer></script>
-</body></html>
+<div class="section-head">
+<div><span class="step">PRIVATE ACCESS</span><h2>Administrator login</h2></div>
+<button class="text-button" id="closeAdmin">CLOSE ✕</button>
 </div>
+<form id="adminLoginForm">
+<label for="adminUser">ADMIN USERNAME</label>
+<input id="adminUser" required autocomplete="username">
+<label for="adminPass">PASSWORD</label>
+<input id="adminPass" type="password" required autocomplete="current-password">
+<button class="btn primary" type="submit">SIGN IN TO DASHBOARD →</button>
+</form>
+</section>
+
+</main>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="/receipt.js" defer></script>
+<script src="/app.js" defer></script>
+
+</body>
+</html>
