@@ -58,10 +58,30 @@ const defaults = {
   price1: "100",
   price7: "200",
   price30: "500",
-  qrFilename: ""
+  qrFilename: "",
+  contactUrl: "https://t.me/CMH2WO"
 };
 const insertSetting = db.prepare("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)");
 for (const [k,v] of Object.entries(defaults)) insertSetting.run(k,v);
+
+// --- Receipt migration: additive only, existing orders/data are preserved ---
+function newTransactionId(createdAt) {
+  const d = createdAt ? new Date(String(createdAt).replace(" ", "T") + "Z") : new Date();
+  const ymd = (isNaN(d) ? new Date() : d).toISOString().slice(0, 10).replace(/-/g, "");
+  const exists = db.prepare("SELECT 1 FROM orders WHERE transaction_id=?");
+  let id;
+  do { id = `H2WO-${ymd}-${crypto.randomBytes(5).toString("hex").toUpperCase()}`; } while (exists.get(id));
+  return id;
+}
+const orderCols = db.prepare("PRAGMA table_info(orders)").all().map(c => c.name);
+if (!orderCols.includes("transaction_id")) db.exec("ALTER TABLE orders ADD COLUMN transaction_id TEXT");
+if (!orderCols.includes("paid_at")) db.exec("ALTER TABLE orders ADD COLUMN paid_at TEXT");
+if (!orderCols.includes("payment_method")) db.exec("ALTER TABLE orders ADD COLUMN payment_method TEXT NOT NULL DEFAULT 'GCash'");
+for (const r of db.prepare("SELECT id,created_at FROM orders WHERE transaction_id IS NULL").all()) {
+  db.prepare("UPDATE orders SET transaction_id=? WHERE id=?").run(newTransactionId(r.created_at), r.id);
+}
+db.exec("UPDATE orders SET paid_at=COALESCE(reviewed_at,created_at) WHERE status='APPROVED' AND paid_at IS NULL");
+db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_transaction_id ON orders(transaction_id)");
 
 app.disable("x-powered-by");
 app.use(helmet({
@@ -146,7 +166,7 @@ function parsePrice(value) {
 }
 function publicOrder(row) {
   return {
-    id: row.id, username: row.username, days: row.days,
+    id: row.id, transactionId: row.transaction_id || "", username: row.username, days: row.days,
     amount: (row.amount_cents / 100).toFixed(2),
     referenceNumber: row.reference_number || "",
     proofUrl: `/api/admin/proofs/${encodeURIComponent(row.proof_filename)}`,
@@ -163,6 +183,7 @@ app.get("/api/public", (req, res) => {
   res.json({
     siteName: s.siteName,
     prices,
+    contactUrl: s.contactUrl || "",
     qrUrl: qrExists ? `/api/qr?v=${encodeURIComponent(s.qrFilename)}` : null
   });
 });
@@ -189,14 +210,52 @@ app.post("/api/orders", orderLimiter, csrfCheck, upload.single("proof"), (req, r
       return res.status(500).json({ error: "Payment pricing is not configured correctly." });
     }
     const id = crypto.randomUUID();
-    db.prepare(`INSERT INTO orders(id,username,days,amount_cents,reference_number,proof_filename)
-      VALUES(?,?,?,?,?,?)`).run(id, username, days, amountCents, reference, req.file.filename);
-    res.status(201).json({ message: "Payment submitted successfully! Please wait for admin verification.", orderId: id });
+    const transactionId = newTransactionId();
+    db.prepare(`INSERT INTO orders(id,username,days,amount_cents,reference_number,proof_filename,transaction_id)
+      VALUES(?,?,?,?,?,?,?)`).run(id, username, days, amountCents, reference, req.file.filename, transactionId);
+    res.status(201).json({ message: "Payment submitted successfully! Please wait for admin verification.", orderId: id, transactionId });
   } catch (err) {
     if (req.file) safeDelete(req.file.filename);
     console.error(err);
     res.status(500).json({ error: "Unable to submit order." });
   }
+});
+
+// --- Customer order status + receipt (server-verified: only APPROVED orders are PAID) ---
+const statusLimiter = rateLimit({ windowMs: 5 * 60 * 1000, limit: 120, standardHeaders: "draft-7", legacyHeaders: false });
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const toIso = v => (v ? String(v).replace(" ", "T") + "Z" : null);
+function findOrder(id) {
+  if (!UUID_RE.test(String(id))) return null;
+  return db.prepare("SELECT * FROM orders WHERE id=?").get(String(id)) || null;
+}
+app.get("/api/orders/:id/status", statusLimiter, (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  const o = findOrder(req.params.id);
+  if (!o) return res.status(404).json({ error: "Order not found." });
+  res.json({ status: o.status, paid: o.status === "APPROVED" && !!o.paid_at, transactionId: o.transaction_id });
+});
+app.get("/api/orders/:id/receipt", statusLimiter, (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  const o = findOrder(req.params.id);
+  if (!o) return res.status(404).json({ error: "Order not found." });
+  if (o.status !== "APPROVED" || !o.paid_at) {
+    return res.status(403).json({ error: "Receipt is available only after your payment has been verified.", status: o.status });
+  }
+  res.json({
+    transactionId: o.transaction_id,
+    customerName: o.username,
+    account: o.username,
+    productName: `H2WO Access - ${o.days} Day${o.days === 1 ? "" : "s"}`,
+    quantity: 1,
+    amount: (o.amount_cents / 100).toFixed(2),
+    paymentMethod: o.payment_method || "GCash",
+    referenceNumber: o.reference_number || "",
+    paidAt: toIso(o.paid_at),
+    issuedAt: new Date().toISOString(),
+    status: "PAID",
+    contactUrl: getSettings().contactUrl || ""
+  });
 });
 
 app.get("/api/qr", (req, res) => {
@@ -258,7 +317,9 @@ app.get("/api/admin/proofs/:filename", requireAdmin, (req, res) => {
 app.post("/api/admin/orders/:id/status", requireAdmin, csrfCheck, (req, res) => {
   const status = String(req.body.status || "");
   if (!["APPROVED", "REJECTED"].includes(status)) return res.status(400).json({ error: "Invalid status." });
-  const result = db.prepare("UPDATE orders SET status=?, reviewed_at=CURRENT_TIMESTAMP WHERE id=?").run(status, req.params.id);
+  const result = status === "APPROVED"
+    ? db.prepare("UPDATE orders SET status='APPROVED', reviewed_at=CURRENT_TIMESTAMP, paid_at=COALESCE(paid_at,CURRENT_TIMESTAMP) WHERE id=?").run(req.params.id)
+    : db.prepare("UPDATE orders SET status='REJECTED', reviewed_at=CURRENT_TIMESTAMP, paid_at=NULL WHERE id=?").run(req.params.id);
   if (!result.changes) return res.status(404).json({ error: "Order not found." });
   res.json({ message: `Order ${status.toLowerCase()}.` });
 });
@@ -276,11 +337,17 @@ app.put("/api/admin/settings", requireAdmin, csrfCheck, upload.single("qr"), (re
     if (req.file) safeDelete(req.file.filename);
     return res.status(400).json({ error: "Enter a site name and valid prices (₱1 to ₱1,000,000)." });
   }
+  const contactUrl = req.body.contactUrl === undefined ? null : String(req.body.contactUrl).trim();
+  if (contactUrl !== null && contactUrl !== "" && !/^https:\/\/[^\s<>"']{3,200}$/i.test(contactUrl)) {
+    if (req.file) safeDelete(req.file.filename);
+    return res.status(400).json({ error: "Contact link must start with https:// (e.g. https://t.me/yourname)." });
+  }
   const oldQr = getSettings().qrFilename;
   setSetting("siteName", siteName);
   setSetting("price1", (p1/100).toFixed(2));
   setSetting("price7", (p7/100).toFixed(2));
   setSetting("price30", (p30/100).toFixed(2));
+  if (contactUrl !== null) setSetting("contactUrl", contactUrl);
   if (req.file) {
     setSetting("qrFilename", req.file.filename);
     if (oldQr && oldQr !== req.file.filename) safeDelete(oldQr);
