@@ -199,7 +199,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_transaction_id
 ON orders(transaction_id);
 );
 
-// DEFAULT SETTINGS
+// SECURITY
 const defaults = {
   siteName: "H2WO STORE",
   qrFilename: "",
