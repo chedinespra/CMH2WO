@@ -158,7 +158,40 @@ function safeDelete(filename) {
   const full = path.join(UPLOAD_DIR, path.basename(filename));
   if (fs.existsSync(full)) fs.unlinkSync(full);
 }
-function validDays(days) { return [1,7,30].includes(Number(days)); }
+const SHADOW_PRICES = {
+  1: {
+    1: 200,
+    7: 400,
+    15: 500,
+    30: 600
+  },
+  2: {
+    1: 400,
+    7: 600,
+    15: 800,
+    30: 1000,
+    40: 1600
+  },
+  5: {
+    1: 500,
+    7: 1000,
+    15: 1500,
+    30: 1700,
+    40: 2800
+  }
+};
+
+function getShadowPrice(deviceCount, duration) {
+  return SHADOW_PRICES[Number(deviceCount)]?.[Number(duration)] ?? null;
+}
+
+function validDays(days) {
+  return [1, 7, 15, 30, 40].includes(Number(days));
+}
+
+function validDevices(devices) {
+  return [1, 2, 5].includes(Number(devices));
+}
 function parsePrice(value) {
   const n = Number(value);
   if (!Number.isFinite(n) || n < 1 || n > 1000000) return null;
