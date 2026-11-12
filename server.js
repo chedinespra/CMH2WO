@@ -216,15 +216,20 @@ function publicOrder(row) {
 
 app.get("/api/public", (req, res) => {
   const s = getSettings();
-  const prices = {
-    1: Number(s.price1), 7: Number(s.price7), 30: Number(s.price30)
-  };
-  const qrExists = !!s.qrFilename && fs.existsSync(path.join(UPLOAD_DIR, path.basename(s.qrFilename)));
+
+  const qrExists =
+    !!s.qrFilename &&
+    fs.existsSync(
+      path.join(UPLOAD_DIR, path.basename(s.qrFilename))
+    );
+
   res.json({
     siteName: s.siteName,
-    prices,
+    prices: SHADOW_PRICES,
     contactUrl: s.contactUrl || "",
-    qrUrl: qrExists ? `/api/qr?v=${encodeURIComponent(s.qrFilename)}` : null
+    qrUrl: qrExists
+      ? /api/qr?v=${encodeURIComponent(s.qrFilename)}
+      : null
   });
 });
 app.get("/api/csrf", (req, res) => res.json({ token: csrfToken(req) }));
