@@ -18,9 +18,32 @@ const trackId = document.getElementById("trackId");
 const trackResult = document.getElementById("trackResult");
 const trackingPanel = document.getElementById("trackBtn").closest(".panel");
 
-let prices = {};
 let csrfToken = "";
 let currentOrderId = "";
+
+// SHADOW MENU PRICE LIST
+const prices = {
+  1: {
+    1: 200,
+    7: 400,
+    15: 500,
+    30: 600
+  },
+  2: {
+    1: 400,
+    7: 600,
+    15: 800,
+    30: 1000,
+    40: 1600
+  },
+  5: {
+    1: 500,
+    7: 1000,
+    15: 1500,
+    30: 1700,
+    40: 2800
+  }
+};
 
 function showPage(page) {
   homePage.hidden = page !== homePage;
@@ -28,13 +51,17 @@ function showPage(page) {
   paymentPage.hidden = page !== paymentPage;
   confirmationPage.hidden = page !== confirmationPage;
 
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  window.scrollTo({
+    top: 0,
+    behavior: "smooth"
+  });
 }
 
 function peso(amount) {
   return "₱" + Number(amount || 0).toLocaleString("en-PH");
 }
 
+// GET CSRF TOKEN
 async function getCsrf() {
   const response = await fetch("/api/csrf");
 
@@ -43,11 +70,13 @@ async function getCsrf() {
   }
 
   const data = await response.json();
-  csrfToken = data.csrfToken  data.token  "";
+
+  csrfToken = data.csrfToken || data.token || "";
 
   return csrfToken;
 }
 
+// GET CORRECT PRICE
 function updatePrice() {
   const amount = prices[devices.value]?.[days.value];
 
@@ -55,6 +84,7 @@ function updatePrice() {
     amount == null ? "Unavailable" : peso(amount);
 }
 
+// LOAD STORE SETTINGS AND GCASH QR
 async function loadStore() {
   try {
     const response = await fetch("/api/public");
@@ -65,13 +95,14 @@ async function loadStore() {
 
     const data = await response.json();
 
-    prices = data.prices || {};
     updatePrice();
 
     if (data.qrUrl) {
       const img = document.createElement("img");
+
       img.src = data.qrUrl;
       img.alt = "GCash payment QR";
+
       qrContainer.replaceChildren(img);
     } else {
       qrContainer.textContent =
@@ -80,8 +111,9 @@ async function loadStore() {
 
     const groupLink = document.getElementById("groupLink");
 
-    if (groupLink && data.groupUrl) {
-      groupLink.href = data.groupUrl;
+    if (groupLink) {
+      groupLink.href =
+        "https://t.me/+jomXsgOkv9NkMTBl";
     }
 
     if (data.siteName) {
@@ -93,16 +125,16 @@ async function loadStore() {
   }
 }
 
-// HOME PAGE → PACKAGE PAGE
+// HOME → PACKAGE
 document.getElementById("startOrder").addEventListener("click", () => {
   showPage(packagePage);
 });
 
-// UPDATE PACKAGE PRICE
+// UPDATE PRICE WHEN DEVICE OR DURATION CHANGES
 devices.addEventListener("change", updatePrice);
 days.addEventListener("change", updatePrice);
 
-// PACKAGE PAGE → PAYMENT PAGE
+// PACKAGE → PAYMENT
 document.getElementById("continuePayment").addEventListener("click", () => {
   if (!form.reportValidity()) {
     return;
@@ -122,16 +154,18 @@ document.getElementById("continuePayment").addEventListener("click", () => {
     " | Total: " + peso(amount);
 
   result.textContent = "";
+
   showPage(paymentPage);
 });
 
-// PAYMENT PAGE → PACKAGE PAGE
+// PAYMENT → PACKAGE
 document.getElementById("backToPackage").addEventListener("click", () => {
   showPage(packagePage);
 });
 
-// SUBMIT PAYMENT AND CREATE ORDER
+// SUBMIT PAYMENT
 document.getElementById("submitBtn").addEventListener("click", async () => {
+
   const referenceNumber = referenceInput.value.trim();
   const proof = proofInput.files[0];
 
@@ -149,7 +183,13 @@ document.getElementById("submitBtn").addEventListener("click", async () => {
     result.textContent = "Please upload an image file.";
     return;
   }
-const amount = prices[devices.value]?.[days.value];
+
+  if (proof.size > 5 * 1024 * 1024) {
+    result.textContent = "Image must be 5 MB or smaller.";
+    return;
+  }
+
+  const amount = prices[devices.value]?.[days.value];
 
   if (amount == null) {
     result.textContent = "This package is unavailable.";
@@ -169,7 +209,11 @@ const amount = prices[devices.value]?.[days.value];
 
     const formData = new FormData();
 
-    formData.append("username", form.elements.username.value.trim());
+    formData.append(
+      "username",
+      form.elements.username.value.trim()
+    );
+
     formData.append("devices", devices.value);
     formData.append("days", days.value);
     formData.append("referenceNumber", referenceNumber);
@@ -201,7 +245,7 @@ const amount = prices[devices.value]?.[days.value];
       throw new Error(data.error || "Order submission failed.");
     }
 
-    currentOrderId = data.orderId  data.id  "";
+    currentOrderId = data.orderId || data.id || "";
 
     if (!currentOrderId) {
       throw new Error(
@@ -219,6 +263,7 @@ const amount = prices[devices.value]?.[days.value];
     proofInput.value = "";
 
     updatePrice();
+
     showPage(confirmationPage);
 
   } catch (error) {
@@ -232,6 +277,7 @@ const amount = prices[devices.value]?.[days.value];
 
 // OPEN ORDER TRACKING
 document.getElementById("trackOrderBtn").addEventListener("click", () => {
+
   trackingPanel.hidden = false;
   trackId.value = currentOrderId;
 
@@ -247,6 +293,7 @@ document.getElementById("trackOrderBtn").addEventListener("click", () => {
 
 // CHECK ORDER STATUS
 async function checkOrder(id) {
+
   if (!id) {
     trackResult.textContent = "Enter your Order ID.";
     return;
@@ -280,8 +327,9 @@ document.getElementById("trackBtn").addEventListener("click", () => {
 
 // INITIAL PAGE
 trackingPanel.hidden = true;
+
 showPage(homePage);
 
-// LOAD STORE DATA
+// LOAD DATA
 getCsrf().catch(error => console.error(error));
 loadStore();
