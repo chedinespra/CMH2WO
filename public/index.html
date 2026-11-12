@@ -29,7 +29,7 @@
   <!-- PACKAGE PAGE -->
   <section id="packagePage" class="panel" hidden>
     <h2>SELECT YOUR PACKAGE</h2>
-    <p class="muted">Choose your device and duration.</p>
+    <p class="muted">Choose number of devices and duration.</p>
 
     <form id="orderForm">
       <label>Username / Game ID</label>
@@ -41,13 +41,6 @@
         <option value="2">2 Devices</option>
         <option value="5">5 Devices</option>
       </select>
-
-      <label for="devices">SELECT DEVICES</label>
-<select id="devices" name="devices" required>
-  <option value="1">1 Device</option>
-  <option value="2">2 Devices</option>
-  <option value="5">5 Devices</option>
-</select>
 
 <label for="days">SELECT DURATION</label>
 <select id="days" name="days" required>
@@ -78,10 +71,22 @@
       <p class="muted">Loading payment QR...</p>
     </div>
 
+    <div id="gcashDetails" class="price-box">
+      <p>GCash Account Name: <strong id="gcashName">Loading...</strong>
+        <button type="button" id="copyGcashName">COPY</button>
+      </p>
+      <p>GCash Number: <strong id="gcashNumber">Loading...</strong>
+        <button type="button" id="copyGcashNumber">COPY</button>
+      </p>
+      <a id="downloadQr" href="#" download="H2WO-GCash-QR.png" hidden>DOWNLOAD GCASH QR</a>
+    </div>
+      <p class="muted">Loading payment QR...</p>
+    </div>
+
     <div id="paymentSummary" class="price-box"></div>
 
-    <label>GCash Reference Number</label>
-    <input id="referenceNumber" placeholder="Enter reference number" required>
+   <label>GCash Reference Number (Optional)</label>
+<input id="referenceNumber" placeholder="Enter reference number (Optional)">
 
     <label>Upload Payment Screenshot</label>
     <input id="proof" type="file" accept="image/*" required>
@@ -101,7 +106,7 @@
     <p>Status: PENDING</p>
 
     <button type="button" id="trackOrderBtn">TRACK ORDER</button>
-    <a href="https://t.me/CMH2WO" target="_blank">CONTACT ADMIN</a>
+    <a id="contactAdminBtn" href="#" target="_blank" rel="noopener">CONTACT ADMIN</a>
   </section>
 
   <!-- TRACKING -->
@@ -121,6 +126,7 @@
   </a>
 </footer>
 
+<script src="/receipt.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

@@ -1,38 +1,352 @@
-let csrf="";
-const $=id=>document.getElementById(id);
-async function api(url,options={}){const res=await fetch(url,options);const data=await res.json().catch(()=>({}));if(!res.ok){if(res.status===401)location.href="/";throw new Error(data.error||"Request failed.");}return data;}
-function toast(m){const el=$("toast");el.textContent=m;el.classList.add("show");setTimeout(()=>el.classList.remove("show"),3000);}
-function money(n){return "₱"+Number(n).toLocaleString("en-PH",{minimumFractionDigits:2,maximumFractionDigits:2});}
-function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
-async function load(){
-  const me=await api("/api/admin/me");csrf=me.token;
-  const [stats,orders,pub]=await Promise.all([api("/api/admin/stats"),api("/api/admin/orders"),api("/api/public")]);
-  $("total").textContent=stats.total;$("pending").textContent=stats.pending;$("approved").textContent=stats.approved;$("rejected").textContent=stats.rejected;$("revenue").textContent=money(stats.revenue);
-  $("siteName").value=pub.siteName;$("price1").value=pub.prices[1];$("price7").value=pub.prices[7];$("price30").value=pub.prices[30];$("contactUrl").value=pub.contactUrl||"";
-  $("ordersBody").innerHTML=orders.length?orders.map(o=>`<tr>
-  <td><strong>${esc(o.transactionId||o.id.slice(0,8))}</strong><br><small>${esc(new Date(o.createdAt+"Z").toLocaleString())}</small></td>
-  <td>${esc(o.username)}</td><td>${o.days} day(s)</td><td>${money(o.amount)}</td><td>${esc(o.referenceNumber||"—")}</td>
-  <td><button class="action" data-view="${esc(o.id)}">VIEW</button></td>
-  <td><span class="status ${o.status}">${o.status}</span></td>
-  <td><div class="actions"><button class="action approve" data-status="APPROVED" data-id="${esc(o.id)}" ${o.status==="APPROVED"?"disabled":""}>APPROVE</button><button class="action reject" data-status="REJECTED" data-id="${esc(o.id)}" ${o.status==="REJECTED"?"disabled":""}>REJECT</button><button class="action" data-delete="${esc(o.id)}">DELETE</button></div></td></tr>`).join(""):'<tr><td colspan="8" class="empty">No customer orders yet.</td></tr>';
+
+let csrf = "";
+const $ = id => document.getElementById(id);
+
+async function api(url, options = {}) {
+  const res = await fetch(url, {
+    credentials: "same-origin",
+    ...options
+  });
+
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    throw new Error(data.error || `Request failed (${res.status})`);
+  }
+
+  return data;
 }
-$("ordersBody").addEventListener("click",async e=>{
-  const view=e.target.closest("[data-view]");const status=e.target.closest("[data-status]");const del=e.target.closest("[data-delete]");
-  try{
-    if(view){const orders=await api("/api/admin/orders");const order=orders.find(o=>o.id===view.dataset.view);if(!order)return; $("proofImage").src=order.proofUrl;$("proofModal").classList.remove("hidden");}
-    if(status){if(!confirm(`Mark this payment ${status.dataset.status.toLowerCase()}?`))return;await api(`/api/admin/orders/${status.dataset.id}/status`,{method:"POST",headers:{"Content-Type":"application/json","x-csrf-token":csrf},body:JSON.stringify({status:status.dataset.status})});toast("Payment status updated.");await load();}
-    if(del){if(!confirm("Permanently delete this order and its uploaded proof?"))return;await api(`/api/admin/orders/${del.dataset.delete}`,{method:"DELETE",headers:{"x-csrf-token":csrf}});toast("Order deleted.");await load();}
-  }catch(err){toast(err.message);}
+
+function toast(message) {
+  const el = $("toast");
+  el.textContent = message;
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), 3000);
+}
+
+function money(amount) {
+  return "₱" + Number(amount).toLocaleString("en-PH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+}
+
+function esc(value) {
+  return String(value ?? "").replace(/[&<>"']/g, char => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[char]);
+}
+
+// GET CSRF TOKEN
+async function getCsrf() {
+  const data = await api("/api/csrf");
+  csrf = data.token;
+  return csrf;
+}
+
+// SHOW LOGIN OR DASHBOARD
+function showLogin() {
+  $("loginPanel").hidden = false;
+  $("adminContent").hidden = true;
+  $("logout").hidden = true;
+}
+
+function showDashboard() {
+  $("loginPanel").hidden = true;
+  $("adminContent").hidden = false;
+  $("logout").hidden = false;
+}
+
+// ADMIN LOGIN
+$("loginForm").addEventListener("submit", async event => {
+  event.preventDefault();
+
+  const button = $("loginButton");
+  const error = $("loginError");
+
+  button.disabled = true;
+  button.textContent = "PLEASE WAIT...";
+  error.textContent = "";
+
+  try {
+    await getCsrf();
+
+    const result = await api("/api/admin/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrf
+      },
+      body: JSON.stringify({
+        username: $("loginUsername").value.trim(),
+        password: $("loginPassword").value
+      })
+    });
+
+    csrf = result.token;
+    $("loginPassword").value = "";
+
+    showDashboard();
+    await loadDashboard();
+
+    toast("Admin login successful.");
+
+  } catch (err) {
+    error.textContent = err.message;
+    showLogin();
+  } finally {
+    button.disabled = false;
+    button.textContent = "LOGIN TO DASHBOARD →";
+  }
 });
-$("refresh").addEventListener("click",()=>load().catch(e=>toast(e.message)));
-$("closeModal").addEventListener("click",()=>$("proofModal").classList.add("hidden"));
-$("proofModal").addEventListener("click",e=>{if(e.target===$("proofModal"))$("proofModal").classList.add("hidden");});
-$("settingsForm").addEventListener("submit",async e=>{
-  e.preventDefault();const fd=new FormData(e.currentTarget);
-  try{await api("/api/admin/settings",{method:"PUT",headers:{"x-csrf-token":csrf},body:fd});toast("Website settings saved.");await load();}catch(err){toast(err.message);}
+
+// LOAD DASHBOARD DATA
+async function loadDashboard() {
+  const [stats, orders, pub] = await Promise.all([
+    api("/api/admin/stats"),
+    api("/api/admin/orders"),
+    api("/api/public")
+  ]);
+
+  $("total").textContent = stats.total;
+  $("pending").textContent = stats.pending;
+  $("approved").textContent = stats.approved;
+  $("rejected").textContent = stats.rejected;
+  $("revenue").textContent = money(stats.revenue);
+
+  $("siteName").value = pub.siteName;
+  $("price1").value = pub.prices[1];
+  $("price7").value = pub.prices[7];
+  $("price30").value = pub.prices[30];
+  $("contactUrl").value = pub.contactUrl || "";
+  $("gcashName").value = pub.gcashName || "";
+  $("gcashNumber").value = pub.gcashNumber || "";
+
+  $("ordersBody").innerHTML = orders.length
+    ? orders.map(order => `
+      <tr>
+        <td>
+          <strong>${esc(order.transactionId || String(order.id).slice(0, 8))}</strong>
+          <br>
+          <small>${esc(new Date(order.createdAt + "Z").toLocaleString())}</small>
+        </td>
+        <td>${esc(order.username)}</td>
+        <td>${esc(order.days)} day(s)</td>
+        <td>${money(order.amount)}</td>
+        <td>${esc(order.referenceNumber || "—")}</td>
+        <td>
+          <button class="action" data-view="${esc(order.id)}">VIEW</button>
+        </td>
+        <td>
+          <span class="status ${esc(order.status)}">${esc(order.status)}</span>
+        </td>
+        <td>
+          <div class="actions">
+            <button class="action approve"
+              data-status="APPROVED"
+              data-id="${esc(order.id)}"
+              ${order.status === "APPROVED" ? "disabled" : ""}>
+              APPROVE
+            </button>
+
+            <button class="action reject"
+              data-status="REJECTED"
+              data-id="${esc(order.id)}"
+              ${order.status === "REJECTED" ? "disabled" : ""}>
+              REJECT
+            </button>
+
+            <button class="action" data-delete="${esc(order.id)}">
+              DELETE
+            </button>
+          </div>
+        </td>
+      </tr>
+    `).join("")
+    : '<tr><td colspan="8" class="empty">No customer orders yet.</td></tr>';
+}
+
+// REFRESH
+$("refresh").addEventListener("click", async () => {
+  try {
+    await loadDashboard();
+    toast("Dashboard refreshed.");
+  } catch (err) {
+    toast(err.message);
+  }
 });
-$("passwordForm").addEventListener("submit",async e=>{
-  e.preventDefault();try{await api("/api/admin/change-password",{method:"POST",headers:{"Content-Type":"application/json","x-csrf-token":csrf},body:JSON.stringify({currentPassword:$("currentPassword").value,newPassword:$("newPassword").value})});toast("Password changed. Log in again.");setTimeout(()=>location.href="/",1200);}catch(err){toast(err.message);}
+
+
+// ORDER ACTIONS
+$("ordersBody").addEventListener("click", async event => {
+  const view = event.target.closest("[data-view]");
+  const status = event.target.closest("[data-status]");
+
+  try {
+    if (view) {
+      const orders = await api("/api/admin/orders");
+      const order = orders.find(
+        item => String(item.id) === view.dataset.view
+      );
+
+      if (!order || !order.proofUrl) {
+        toast("Payment proof not found.");
+        return;
+      }
+
+      const proofImage = $("proofImage");
+      const proofModal = $("proofModal");
+
+      proofImage.onload = () => {
+        toast("Payment proof loaded.");
+      };
+
+      proofImage.onerror = () => {
+        toast("Unable to load payment proof.");
+      };
+
+      proofImage.src = order.proofUrl;
+      proofModal.classList.remove("hidden");
+    }
+
+    if (status) {
+      const newStatus = status.dataset.status;
+
+      if (!confirm(`Mark this payment ${newStatus.toLowerCase()}?`)) return;
+
+      await api(`/api/admin/orders/${status.dataset.id}/status`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrf
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      toast("Payment status updated.");
+      await loadDashboard();
+    }
+  } catch (err) {
+    toast(err.message);
+  }
 });
-$("logout").addEventListener("click",async()=>{try{await api("/api/admin/logout",{method:"POST",headers:{"x-csrf-token":csrf}});location.href="/";}catch(err){toast(err.message);}});
-load().catch(()=>location.href="/");
+
+// CLOSE PAYMENT PROOF
+$("closeModal").addEventListener("click", () => {
+  $("proofModal").classList.add("hidden");
+});
+
+$("proofModal").addEventListener("click", event => {
+  if (event.target === $("proofModal")) {
+    $("proofModal").classList.add("hidden");
+  }
+});
+
+// SAVE WEBSITE SETTINGS
+$("settingsForm").addEventListener("submit", async event => {
+  event.preventDefault();
+
+  const formData = new FormData(event.currentTarget);
+
+  try {
+    await api("/api/admin/settings", {
+      method: "POST",
+      headers: {
+        "X-CSRF-Token": csrf
+      },
+      body: formData
+    });
+
+    toast("Website settings saved.");
+    await loadDashboard();
+  } catch (err) {
+    toast(err.message);
+  }
+});
+
+// CHANGE PASSWORD
+$("passwordForm").addEventListener("submit", async event => {
+  event.preventDefault();
+
+  try {
+    await api("/api/admin/change-password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrf
+      },
+      body: JSON.stringify({
+        currentPassword: $("currentPassword").value,
+        newPassword: $("newPassword").value
+      })
+    });
+
+    toast("Password changed. Please log in again.");
+
+    setTimeout(async () => {
+      try {
+        await api("/api/admin/logout", {
+          method: "POST",
+          headers: { "X-CSRF-Token": csrf }
+        });
+      } catch (_) {}
+
+      location.reload();
+    }, 1200);
+
+  } catch (err) {
+    toast(err.message);
+  }
+});
+
+// LOGOUT
+$("logout").addEventListener("click", async () => {
+  try {
+    await api("/api/admin/logout", {
+      method: "POST",
+      headers: {
+        "X-CSRF-Token": csrf
+      }
+    });
+
+    csrf = "";
+    showLogin();
+    await getCsrf();
+    toast("Logged out successfully.");
+
+  } catch (err) {
+    toast(err.message);
+  }
+});
+
+// INITIAL CHECK
+async function initialize() {
+  showLogin();
+
+  try {
+    const me = await api("/api/admin/me");
+    csrf = me.token;
+
+    showDashboard();
+    await loadDashboard();
+
+  } catch (err) {
+    if (err.message === "Admin login required.") {
+      try {
+        await getCsrf();
+      } catch (csrfError) {
+        $("loginError").textContent = csrfError.message;
+      }
+
+      showLogin();
+    } else {
+      $("loginError").textContent = err.message;
+    }
+  }
+}
+
+initialize();

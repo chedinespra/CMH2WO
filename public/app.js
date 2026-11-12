@@ -95,6 +95,38 @@ async function loadStore() {
 
     const data = await response.json();
 
+    const gcashNameEl = document.getElementById("gcashName");
+    const gcashNumberEl = document.getElementById("gcashNumber");
+    const copyNameBtn = document.getElementById("copyGcashName");
+    const copyNumberBtn = document.getElementById("copyGcashNumber");
+    const downloadQr = document.getElementById("downloadQr");
+
+    if (gcashNameEl) gcashNameEl.textContent = data.gcashName || "Not set";
+    if (gcashNumberEl) gcashNumberEl.textContent = data.gcashNumber || "Not set";
+
+    async function copyGcash(value, button) {
+      if (!value) return;
+      try {
+        await navigator.clipboard.writeText(value);
+        const original = button.textContent;
+        button.textContent = "COPIED!";
+        setTimeout(() => button.textContent = original, 1500);
+      } catch {
+        alert("Copy failed. Please copy manually.");
+      }
+    }
+
+    if (copyNameBtn) {
+      copyNameBtn.onclick = () => copyGcash(data.gcashName, copyNameBtn);
+    }
+    if (copyNumberBtn) {
+      copyNumberBtn.onclick = () => copyGcash(data.gcashNumber, copyNumberBtn);
+    }
+    if (downloadQr && data.qrUrl) {
+      downloadQr.href = data.qrUrl;
+      downloadQr.hidden = false;
+    }
+
     updatePrice();
 
     if (data.qrUrl) {
@@ -112,10 +144,13 @@ async function loadStore() {
     const groupLink = document.getElementById("groupLink");
 
     if (groupLink) {
-      groupLink.href =
-        "https://t.me/+jomXsgOkv9NkMTBl";
+      groupLink.href = data.telegramUrl || "https://t.me/+jomXsgOkv9NkMTBl";
     }
 
+    const contactAdminBtn = document.getElementById("contactAdminBtn");
+    if (contactAdminBtn) {
+      contactAdminBtn.href = data.contactUrl || "#";
+    }
     if (data.siteName) {
       document.title = data.siteName;
     }
@@ -125,7 +160,7 @@ async function loadStore() {
   }
 }
 
-// HOME → PACKAGE
+// HOME â†’ PACKAGE
 document.getElementById("startOrder").addEventListener("click", () => {
   showPage(packagePage);
 });
@@ -134,7 +169,7 @@ document.getElementById("startOrder").addEventListener("click", () => {
 devices.addEventListener("change", updatePrice);
 days.addEventListener("change", updatePrice);
 
-// PACKAGE → PAYMENT
+// PACKAGE â†’ PAYMENT
 document.getElementById("continuePayment").addEventListener("click", () => {
   if (!form.reportValidity()) {
     return;
@@ -158,7 +193,7 @@ document.getElementById("continuePayment").addEventListener("click", () => {
   showPage(paymentPage);
 });
 
-// PAYMENT → PACKAGE
+// PAYMENT â†’ PACKAGE
 document.getElementById("backToPackage").addEventListener("click", () => {
   showPage(packagePage);
 });
@@ -168,11 +203,6 @@ document.getElementById("submitBtn").addEventListener("click", async () => {
 
   const referenceNumber = referenceInput.value.trim();
   const proof = proofInput.files[0];
-
-  if (!referenceNumber) {
-    result.textContent = "Enter your GCash reference number.";
-    return;
-  }
 
   if (!proof) {
     result.textContent = "Please upload your payment screenshot.";
@@ -240,6 +270,38 @@ document.getElementById("submitBtn").addEventListener("click", async () => {
     }
 
     const data = await response.json();
+
+    const gcashNameEl = document.getElementById("gcashName");
+    const gcashNumberEl = document.getElementById("gcashNumber");
+    const copyNameBtn = document.getElementById("copyGcashName");
+    const copyNumberBtn = document.getElementById("copyGcashNumber");
+    const downloadQr = document.getElementById("downloadQr");
+
+    if (gcashNameEl) gcashNameEl.textContent = data.gcashName || "Not set";
+    if (gcashNumberEl) gcashNumberEl.textContent = data.gcashNumber || "Not set";
+
+    async function copyGcash(value, button) {
+      if (!value) return;
+      try {
+        await navigator.clipboard.writeText(value);
+        const original = button.textContent;
+        button.textContent = "COPIED!";
+        setTimeout(() => button.textContent = original, 1500);
+      } catch {
+        alert("Copy failed. Please copy manually.");
+      }
+    }
+
+    if (copyNameBtn) {
+      copyNameBtn.onclick = () => copyGcash(data.gcashName, copyNameBtn);
+    }
+    if (copyNumberBtn) {
+      copyNumberBtn.onclick = () => copyGcash(data.gcashNumber, copyNumberBtn);
+    }
+    if (downloadQr && data.qrUrl) {
+      downloadQr.href = data.qrUrl;
+      downloadQr.hidden = false;
+    }
 
     if (!response.ok) {
       throw new Error(data.error || "Order submission failed.");
@@ -312,8 +374,50 @@ async function checkOrder(id) {
       throw new Error(data.error || "Order not found.");
     }
 
-    trackResult.textContent =
-      "Order Status: " + (data.status || "UNKNOWN");
+    trackResult.replaceChildren();
+
+    const statusText = document.createElement("p");
+    statusText.textContent = "Order Status: " + (data.status || "UNKNOWN");
+    trackResult.appendChild(statusText);
+
+    if (String(data.status).toUpperCase() === "APPROVED") {
+      const receiptButton = document.createElement("button");
+      receiptButton.type = "button";
+      receiptButton.textContent = "DOWNLOAD RECEIPT";
+      trackResult.appendChild(receiptButton);
+
+      receiptButton.addEventListener("click", async () => {
+        receiptButton.disabled = true;
+        receiptButton.textContent = "PREPARING RECEIPT...";
+
+        try {
+          const receiptResponse = await fetch(
+            "/api/orders/" + encodeURIComponent(id) + "/receipt"
+          );
+
+          const receiptData = await receiptResponse.json();
+
+          if (!receiptResponse.ok) {
+            throw new Error(receiptData.error || "Cannot generate receipt.");
+          }
+
+          if (!window.H2WOReceipt) {
+            throw new Error("Receipt generator not loaded.");
+          }
+
+          const canvas = document.createElement("canvas");
+          await window.H2WOReceipt.render(receiptData, canvas);
+          window.H2WOReceipt.download(canvas, receiptData);
+
+          receiptButton.textContent = "DOWNLOAD RECEIPT";
+        } catch (error) {
+          alert(error.message);
+          receiptButton.textContent = "TRY AGAIN";
+        } finally {
+          receiptButton.disabled = false;
+        }
+      });
+    }
 
   } catch (error) {
     trackResult.textContent = error.message;

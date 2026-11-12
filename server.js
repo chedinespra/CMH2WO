@@ -272,7 +272,7 @@ app.use(session({
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 8,
+  limit: 20,
   standardHeaders: "draft-7",
   legacyHeaders: false
 });
@@ -449,6 +449,8 @@ app.get("/api/public", (_req, res) => {
 
   res.json({
     siteName: settings.siteName || "H2WO STORE",
+    gcashName: settings.gcashName || "",
+    gcashNumber: settings.gcashNumber || "",
     prices: SHADOW_PRICES,
     contactUrl: settings.contactUrl || "",
     telegramUrl: settings.telegramUrl || "",
@@ -882,6 +884,8 @@ app.get("/api/admin/settings", requireAdmin, (_req, res) => {
     price1: settings.price1 || "200",
     price7: settings.price7 || "400",
     price30: settings.price30 || "600",
+    gcashName: settings.gcashName || "",
+    gcashNumber: settings.gcashNumber || "",
     contactUrl: settings.contactUrl || "",
     telegramUrl: settings.telegramUrl || "",
     tiktokUrl: settings.tiktokUrl || "",
@@ -901,6 +905,13 @@ app.post(
       if (body.siteName !== undefined) {
         const name = String(body.siteName).trim().slice(0, 60);
         if (name) setSetting("siteName", name);
+      }
+
+      for (const key of ["gcashName", "gcashNumber"]) {
+        if (body[key] !== undefined) {
+          const maxLength = key === "gcashName" ? 100 : 30;
+          setSetting(key, String(body[key]).trim().slice(0, maxLength));
+        }
       }
 
       for (const key of ["price1", "price7", "price30"]) {
@@ -1016,10 +1027,15 @@ if (fs.existsSync(PUBLIC_DIR)) {
   }));
 }
 
-app.get("/admin", (_req, res) => {
-  res.sendFile(path.join(PUBLIC_DIR, "admin.html"));
+// ADMIN PAGE
+app.get(["/admin", "/admin.html"], (_req, res) => {
+  res.sendFile(path.join(ROOT, "admin.html"));
 });
 
+// ADMIN JAVASCRIPT
+app.get("/admin.js", (_req, res) => {
+  res.sendFile(path.join(ROOT, "admin.js"));
+});
 // HEALTH CHECK
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
