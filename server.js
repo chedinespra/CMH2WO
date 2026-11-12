@@ -74,6 +74,13 @@ function newTransactionId(createdAt) {
   return id;
 }
 const orderCols = db.prepare("PRAGMA table_info(orders)").all().map(c => c.name);
+// Add device count without deleting existing orders
+if (!orderCols.includes("devices")) {
+  db.exec(`
+    ALTER TABLE orders
+    ADD COLUMN devices INTEGER NOT NULL DEFAULT 1
+  `);
+}
 if (!orderCols.includes("transaction_id")) db.exec("ALTER TABLE orders ADD COLUMN transaction_id TEXT");
 if (!orderCols.includes("paid_at")) db.exec("ALTER TABLE orders ADD COLUMN paid_at TEXT");
 if (!orderCols.includes("payment_method")) db.exec("ALTER TABLE orders ADD COLUMN payment_method TEXT NOT NULL DEFAULT 'GCash'");
