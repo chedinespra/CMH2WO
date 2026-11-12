@@ -234,38 +234,110 @@ app.get("/api/public", (req, res) => {
 });
 app.get("/api/csrf", (req, res) => res.json({ token: csrfToken(req) }));
 
-app.post("/api/orders", orderLimiter, csrfCheck, upload.single("proof"), (req, res) => {
-  try {
-    const username = String(req.body.username || "").trim();
-    const days = Number(req.body.days);
-    const reference = String(req.body.referenceNumber || "").trim().slice(0, 80);
-    if (!username || username.length > 40 || !/^[\p{L}\p{N} _.-]+$/u.test(username)) {
-      if (req.file) safeDelete(req.file.filename);
-      return res.status(400).json({ error: "Enter a valid username (maximum 40 characters)." });
-    }
-    if (!validDays(days)) {
-      if (req.file) safeDelete(req.file.filename);
-      return res.status(400).json({ error: "Choose 1, 7, or 30 days." });
-    }
-    if (!req.file) return res.status(400).json({ error: "Upload your payment screenshot." });
-    const settings = getSettings();
-    const amountCents = parsePrice(settings[`price${days}`]);
-    if (amountCents === null) {
-      safeDelete(req.file.filename);
-      return res.status(500).json({ error: "Payment pricing is not configured correctly." });
-    }
-    const id = crypto.randomUUID();
-    const transactionId = newTransactionId();
-    db.prepare(`INSERT INTO orders(id,username,days,amount_cents,reference_number,proof_filename,transaction_id)
-      VALUES(?,?,?,?,?,?,?)`).run(id, username, days, amountCents, reference, req.file.filename, transactionId);
-    res.status(201).json({ message: "Payment submitted successfully! Please wait for admin verification.", orderId: id, transactionId });
-  } catch (err) {
-    if (req.file) safeDelete(req.file.filename);
-    console.error(err);
-    res.status(500).json({ error: "Unable to submit order." });
-  }
-});
+app.post(
+  "/api/orders",
+  orderLimiter,
+  csrfCheck,
+  upload.single("proof"),
+  (req, res) => {
+    try {
+      const username = String(req.body.username || "").trim();
+      const devices = Number(req.body.devices);
+      const days = Number(req.body.days);
 
+      const reference = String(
+        req.body.referenceNumber || ""
+      ).trim().slice(0, 80);
+
+      if (
+        !username ||
+        username.length > 40 ||
+        !/^[\p{L}\p{N} _.-]+$/u.test(username)
+      ) {
+        if (req.file) safeDelete(req.file.filename);
+
+        return res.status(400).json({
+          error: "Enter a valid username."
+        });
+      }
+
+      if (!validDevices(devices)) {
+        if (req.file) safeDelete(req.file.filename);
+
+        return res.status(400).json({
+          error: "Choose 1, 2, or 5 devices."
+        });
+      }
+
+      if (!validDays(days)) {
+        if (req.file) safeDelete(req.file.filename);
+
+        return res.status(400).json({
+          error: "Choose 1, 7, 15, 30, or 40 days."
+        });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({
+          error: "Upload your payment screenshot."
+        });
+      }
+
+      const amount = getShadowPrice(devices, days);
+
+      if (amount === null) {
+        safeDelete(req.file.filename);
+
+        return res.status(400).json({
+          error: "This package is unavailable."
+        });
+      }
+
+      const amountCents = Math.round(amount * 100);
+
+      const id = crypto.randomUUID();
+      const transactionId = newTransactionId();
+
+      db.prepare(`
+        INSERT INTO orders (
+          id,
+          username,
+          days,
+          devices,
+          amount_cents,
+          reference_number,
+          proof_filename,
+          transaction_id
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id,
+        username,
+        days,
+        devices,
+        amountCents,
+        reference,
+        req.file.filename,
+        transactionId
+      );
+
+      res.status(201).json({
+        message: "Payment submitted successfully!",
+        orderId: id,
+        transactionId
+      });
+
+    } catch (err) {
+      if (req.file) safeDelete(req.file.filename);
+
+      console.error(err);
+
+      res.status(500).json({
+        error: "Unable to submit order."
+      });
+    }
+  }
+);
 // --- Customer order status + receipt (server-verified: only APPROVED orders are PAID) ---
 const statusLimiter = rateLimit({ windowMs: 5 * 60 * 1000, limit: 120, standardHeaders: "draft-7", legacyHeaders: false });
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
