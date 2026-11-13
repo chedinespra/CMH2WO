@@ -1,4 +1,4 @@
-﻿require("dotenv").config();
+require("dotenv").config();
 
 const express = require("express");
 const session = require("express-session");
@@ -45,6 +45,12 @@ const SHADOW_PRICES = {
   1: { 1: 200, 7: 400, 15: 500, 30: 600 },
   2: { 1: 400, 7: 600, 15: 800, 30: 1000, 40: 1600 },
   5: { 1: 500, 7: 1000, 15: 1500, 30: 1700, 40: 2800 }
+};
+
+const WARTK_PRICES = {
+  1: 100,
+  7: 250,
+  30: 500
 };
 
 const asyncRoute = fn => (req, res, next) => {
@@ -97,6 +103,11 @@ function getShadowPrice(devices, days) {
   return Number.isFinite(price) ? Math.round(price * 100) : null;
 }
 
+function getWartkPrice(days) {
+  const price = WARTK_PRICES[Number(days)];
+  return Number.isFinite(price) ? Math.round(price * 100) : null;
+}
+
 function toIso(value) {
   return value ? String(value).replace(" ", "T") + "Z" : null;
 }
@@ -105,6 +116,7 @@ function publicOrder(row) {
   return {
     id: row.id,
     transactionId: row.transaction_id || "",
+    menuType: row.menu_type || "SHADOW",
     username: row.username,
     devices: Number(row.devices || 1),
     days: Number(row.days),
@@ -345,6 +357,17 @@ const upload = multer({
   }
 });
 
+const proofUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, callback) => {
+    if (!["image/jpeg", "image/png"].includes(file.mimetype)) {
+      return callback(new Error("Only JPG and PNG images are allowed."));
+    }
+    callback(null, true);
+  }
+});
+
 // PUBLIC STORE DATA
 app.get("/api/public", asyncRoute(async (_req, res) => {
   const settings = await getSettings();
@@ -358,6 +381,7 @@ app.get("/api/public", asyncRoute(async (_req, res) => {
     gcashName: settings.gcashName || "",
     gcashNumber: settings.gcashNumber || "",
     prices: SHADOW_PRICES,
+    wartkPrices: WARTK_PRICES,
     contactUrl: settings.contactUrl || "",
     telegramUrl: settings.telegramUrl || "",
     tiktokUrl: settings.tiktokUrl || "",
@@ -376,12 +400,13 @@ app.post(
   "/api/orders",
   orderLimiter,
   csrfCheck,
-  upload.single("proof"),
+  proofUpload.single("proof"),
   asyncRoute(async (req, res) => {
     try {
       const username = String(req.body.username || "").trim();
-      const devices = Number(req.body.devices);
+      const menuType = String(req.body.menuType || "SHADOW").trim().toUpperCase();
       const days = Number(req.body.days);
+      const devices = menuType === "WARTK" ? 1 : Number(req.body.devices);
       const reference = String(req.body.referenceNumber || "").trim().slice(0, 80);
 
       if (!validUsername(username)) {
@@ -391,12 +416,19 @@ app.post(
         });
       }
 
-      if (![1, 2, 5].includes(devices)) {
+      if (!["SHADOW", "WARTK"].includes(menuType)) {
+        if (req.file) safeDelete(req.file.filename);
+        return res.status(400).json({ error: "Invalid menu selection." });
+      }
+
+      if (menuType === "SHADOW" && ![1, 2, 5].includes(devices)) {
         if (req.file) safeDelete(req.file.filename);
         return res.status(400).json({ error: "Choose 1, 2, or 5 devices." });
       }
 
-      const amountCents = getShadowPrice(devices, days);
+      const amountCents = menuType === "WARTK"
+        ? getWartkPrice(days)
+        : getShadowPrice(devices, days);
 
       if (amountCents === null) {
         if (req.file) safeDelete(req.file.filename);
@@ -410,6 +442,8 @@ app.post(
       }
 
       const id = crypto.randomUUID();
+      const proofExt = req.file.mimetype === "image/png" ? ".png" : ".jpg";
+      const proofFilename = `${crypto.randomUUID()}${proofExt}`;
       const transactionId = await newTransactionId();
       const tx = await db.transaction("write");
 
@@ -417,11 +451,11 @@ app.post(
         await tx.execute({
           sql: `INSERT INTO orders(
             id,username,devices,days,amount_cents,
-            reference_number,proof_filename,transaction_id,payment_method
-          ) VALUES(?,?,?,?,?,?,?,?,?)`,
+            reference_number,proof_filename,proof_data,proof_mime,transaction_id,payment_method,menu_type
+          ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
           args: [
             id, username, devices, days, amountCents,
-            reference, req.file.filename, transactionId, "GCash"
+            reference, proofFilename, req.file.buffer, req.file.mimetype, transactionId, "GCash", menuType
           ]
         });
 
@@ -485,7 +519,7 @@ app.get("/api/orders/:id/receipt", statusLimiter, asyncRoute(async (req, res) =>
     transactionId: order.transaction_id,
     customerName: order.username,
     account: order.username,
-    productName: `SHADOW MENU - ${order.days} Day${order.days === 1 ? "" : "s"}`,
+    productName: `${order.menu_type || "SHADOW"} MENU - ${order.days} Day${order.days === 1 ? "" : "s"}`,
     devices: Number(order.devices || 1),
     quantity: Number(order.devices || 1),
     amount: (Number(order.amount_cents) / 100).toFixed(2),
@@ -656,17 +690,25 @@ app.get("/api/admin/proofs/:filename", requireAdmin, asyncRoute(async (req, res)
   const filename = path.basename(req.params.filename);
 
   const result = await db.execute({
-    sql: "SELECT id FROM orders WHERE proof_filename=?",
+    sql: "SELECT proof_data, proof_mime FROM orders WHERE proof_filename=?",
     args: [filename]
   });
 
   if (!result.rows.length) return res.status(404).end();
 
+  const order = result.rows[0];
+
+  if (order.proof_data && order.proof_data.length > 0) {
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Content-Type", order.proof_mime || "image/jpeg");
+    return res.send(Buffer.from(order.proof_data));
+  }
+
   const fullPath = path.join(UPLOAD_DIR, filename);
   if (!fs.existsSync(fullPath)) return res.status(404).end();
 
   res.setHeader("Cache-Control", "no-store");
-  res.sendFile(fullPath);
+  return res.sendFile(fullPath);
 }));
 
 // ADMIN APPROVE / REJECT PAYMENT
@@ -969,6 +1011,28 @@ app.use((error, _req, res, _next) => {
 async function startServer() {
   try {
     await db.execute("SELECT 1");
+
+    const orderColumns = await db.execute("PRAGMA table_info(orders)");
+    const hasMenuType = orderColumns.rows.some(column => column.name === "menu_type");
+
+    if (!hasMenuType) {
+      await db.execute(
+        "ALTER TABLE orders ADD COLUMN menu_type TEXT NOT NULL DEFAULT 'SHADOW'"
+      );
+      console.log("Added menu_type column. Existing orders default to SHADOW.");
+    }
+
+    const hasProofData = orderColumns.rows.some(column => column.name === "proof_data");
+    if (!hasProofData) {
+      await db.execute("ALTER TABLE orders ADD COLUMN proof_data BLOB");
+      console.log("Added proof_data column.");
+    }
+
+    const hasProofMime = orderColumns.rows.some(column => column.name === "proof_mime");
+    if (!hasProofMime) {
+      await db.execute("ALTER TABLE orders ADD COLUMN proof_mime TEXT");
+      console.log("Added proof_mime column.");
+    }
 
     await db.execute(`
       CREATE TABLE IF NOT EXISTS sessions (

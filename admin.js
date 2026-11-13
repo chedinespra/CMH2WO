@@ -25,7 +25,7 @@ function toast(message) {
 }
 
 function money(amount) {
-  return "₱" + Number(amount).toLocaleString("en-PH", {
+  return "\u20B1" + Number(amount).toLocaleString("en-PH", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   });
@@ -102,7 +102,7 @@ $("loginForm").addEventListener("submit", async event => {
     showLogin();
   } finally {
     button.disabled = false;
-    button.textContent = "LOGIN TO DASHBOARD →";
+    button.textContent = "LOGIN TO DASHBOARD \u2192";
   }
 });
 
@@ -137,9 +137,9 @@ async function loadDashboard() {
           <small>${esc(new Date(order.createdAt + "Z").toLocaleString())}</small>
         </td>
         <td>${esc(order.username)}</td>
-        <td>${esc(order.days)} day(s)</td>
+        <td><strong>${esc(order.menuType || "SHADOW")} MENU</strong><br><small>${esc(order.devices)} device(s) · ${esc(order.days)} day(s)</small></td>
         <td>${money(order.amount)}</td>
-        <td>${esc(order.referenceNumber || "—")}</td>
+        <td>${esc(order.referenceNumber || "\u2014")}</td>
         <td>
           <button class="action" data-view="${esc(order.id)}">VIEW</button>
         </td>

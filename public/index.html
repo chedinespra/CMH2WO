@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -16,40 +16,56 @@
 
 <main class="container">
 
-  <!-- HOME PAGE -->
+  <!-- MENU SELECTION -->
   <section id="homePage" class="hero">
     <p class="eyebrow">PREMIUM GAMING ACCESS</p>
     <h1>WELCOME TO<br><span>H2WO STORE</span></h1>
-    <p class="subtitle">Fast • Secure • Reliable</p>
-    <button type="button" id="startOrder" class="primary-btn">
-      ORDER NOW
+    <p class="subtitle">Select your preferred menu</p>
+
+    <div class="menu-options">
+      <button type="button" id="selectShadow" class="menu-option">
+        <strong>SHADOW MENU</strong>
+        <span>Premium access packages</span>
+      </button>
+
+      <button type="button" id="selectWartk" class="menu-option">
+        <strong>WARTK MENU</strong>
+        <span>Affordable access packages</span>
+      </button>
+    </div>
+
+    <button type="button" id="startOrder" class="primary-btn" disabled>
+      ENTER SELECTED MENU
     </button>
   </section>
 
   <!-- PACKAGE PAGE -->
   <section id="packagePage" class="panel" hidden>
-    <h2>SELECT YOUR PACKAGE</h2>
-    <p class="muted">Choose number of devices and duration.</p>
+    <h2 id="menuTitle">SELECT YOUR PACKAGE</h2>
+    <p id="menuDescription" class="muted">Choose your package.</p>
 
     <form id="orderForm">
-      <label>Username / Game ID</label>
-      <input name="username" required placeholder="Enter your username">
+      <label for="username">Username / Game ID</label>
+      <input id="username" name="username" required maxlength="80"
+        placeholder="Enter your username">
 
-      <label>Number of Devices</label>
-      <select name="devices" id="devices" required>
-        <option value="1">1 Device</option>
-        <option value="2">2 Devices</option>
-        <option value="5">5 Devices</option>
+      <div id="deviceField">
+        <label for="devices">Number of Devices</label>
+        <select name="devices" id="devices" required>
+          <option value="1">1 Device</option>
+          <option value="2">2 Devices</option>
+          <option value="5">5 Devices</option>
+        </select>
+      </div>
+
+      <label for="days">SELECT DURATION</label>
+      <select id="days" name="days" required>
+        <option value="1">1 Day</option>
+        <option value="7">7 Days</option>
+        <option value="15">15 Days</option>
+        <option value="30">30 Days</option>
+        <option value="40">40 Days</option>
       </select>
-
-<label for="days">SELECT DURATION</label>
-<select id="days" name="days" required>
-  <option value="1">1 Day</option>
-  <option value="7">7 Days</option>
-  <option value="15">15 Days</option>
-  <option value="30">30 Days</option>
-  <option value="40">40 Days</option>
-</select>
 
       <div class="price-box">
         <span>Total Price</span>
@@ -78,20 +94,22 @@
       <p>GCash Number: <strong id="gcashNumber">Loading...</strong>
         <button type="button" id="copyGcashNumber">COPY</button>
       </p>
-      <a id="downloadQr" href="#" download="H2WO-GCash-QR.png" hidden>DOWNLOAD GCASH QR</a>
-    </div>
-      <p class="muted">Loading payment QR...</p>
+      <a id="downloadQr" href="#" download="H2WO-GCash-QR.png" hidden>
+        DOWNLOAD GCASH QR
+      </a>
     </div>
 
     <div id="paymentSummary" class="price-box"></div>
 
-   <label>GCash Reference Number (Optional)</label>
-<input id="referenceNumber" placeholder="Enter reference number (Optional)">
+    <label for="referenceNumber">GCash Reference Number (Optional)</label>
+    <input id="referenceNumber" placeholder="Enter reference number">
 
-    <label>Upload Payment Screenshot</label>
+    <label for="proof">Upload Payment Screenshot</label>
     <input id="proof" type="file" accept="image/*" required>
 
-    <button type="button" id="submitBtn">SUBMIT PAYMENT</button>
+    <button type="button" id="submitBtn" class="primary-btn">
+      SUBMIT PAYMENT
+    </button>
     <button type="button" id="backToPackage">BACK</button>
 
     <div id="result" class="result"></div>
@@ -106,11 +124,13 @@
     <p>Status: PENDING</p>
 
     <button type="button" id="trackOrderBtn">TRACK ORDER</button>
-    <a id="contactAdminBtn" href="#" target="_blank" rel="noopener">CONTACT ADMIN</a>
+    <a id="contactAdminBtn" href="#" target="_blank" rel="noopener">
+      CONTACT ADMIN
+    </a>
   </section>
 
-  <!-- TRACKING -->
-  <section class="panel">
+  <!-- ORDER TRACKING -->
+  <section id="trackingPanel" class="panel">
     <h2>TRACK YOUR ORDER</h2>
     <input id="trackId" placeholder="Enter your Order ID">
     <button type="button" id="trackBtn">TRACK ORDER</button>
@@ -121,9 +141,8 @@
 
 <footer>
   <p>© 2026 H2WO STORE. All rights reserved.</p>
-  <a id="groupLink" href="https://t.me/+jomXsgOkv9NkMTBl" target="_blank">
-    JOIN TELEGRAM GROUP
-  </a>
+  <a id="groupLink" href="https://t.me/+jomXsgOkv9NkMTBl"
+    target="_blank" rel="noopener">JOIN TELEGRAM GROUP</a>
 </footer>
 
 <script src="/receipt.js"></script>
