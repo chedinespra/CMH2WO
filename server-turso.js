@@ -627,6 +627,40 @@ app.get("/api/admin/orders", requireAdmin, asyncRoute(async (_req, res) => {
   res.json(result.rows.map(publicOrder));
 }));
 
+// ADMIN DELETE ORDER
+app.delete("/api/admin/orders/:id", requireAdmin, csrfCheck, asyncRoute(async (req, res) => {
+  const tx = await db.transaction("write");
+
+  try {
+    const existing = await tx.execute({
+      sql: "SELECT id FROM orders WHERE id=?",
+      args: [req.params.id]
+    });
+
+    if (!existing.rows.length) {
+      await tx.rollback();
+      return res.status(404).json({ error: "Order not found." });
+    }
+
+    await tx.execute({
+      sql: "DELETE FROM order_events WHERE order_id=?",
+      args: [req.params.id]
+    });
+
+    await tx.execute({
+      sql: "DELETE FROM orders WHERE id=?",
+      args: [req.params.id]
+    });
+
+    await tx.commit();
+    res.json({ message: "Order deleted successfully." });
+  } catch (error) {
+    await tx.rollback().catch(() => {});
+    console.error("Order deletion error:", error);
+    res.status(500).json({ error: "Could not delete order." });
+  }
+}));
+
 // ORDER EVENT HISTORY
 app.get("/api/admin/orders/:id/events", requireAdmin, asyncRoute(async (req, res) => {
   const order = await db.execute({

@@ -187,6 +187,7 @@ $("refresh").addEventListener("click", async () => {
 $("ordersBody").addEventListener("click", async event => {
   const view = event.target.closest("[data-view]");
   const status = event.target.closest("[data-status]");
+  const del = event.target.closest("[data-delete]");
 
   try {
     if (view) {
@@ -213,6 +214,21 @@ $("ordersBody").addEventListener("click", async event => {
 
       proofImage.src = order.proofUrl;
       proofModal.classList.remove("hidden");
+      return;
+    }
+
+    if (del) {
+      if (!confirm("Are you sure you want to permanently delete this order?")) return;
+
+      await api(`/api/admin/orders/${del.dataset.delete}`, {
+        method: "DELETE",
+        headers: {
+          "X-CSRF-Token": csrf
+        }
+      });
+
+      toast("Order deleted successfully.");
+      await loadDashboard();
       return;
     }
 
