@@ -131,6 +131,10 @@ function enterSelectedMenu() {
 
 startOrder.addEventListener("click", enterSelectedMenu);
 
+document.getElementById("backToMenu").addEventListener("click", () => {
+  showPage(homePage);
+});
+
 devices.addEventListener("change", updateDays);
 days.addEventListener("change", updatePrice);
 
