@@ -50,6 +50,8 @@ async function getCsrf() {
 
 // SHOW LOGIN OR DASHBOARD
 function showLogin() {
+  $("proofModal").classList.add("hidden");
+  $("proofImage").removeAttribute("src");
   $("loginPanel").hidden = false;
   $("adminContent").hidden = true;
   $("logout").hidden = true;
@@ -211,6 +213,7 @@ $("ordersBody").addEventListener("click", async event => {
 
       proofImage.src = order.proofUrl;
       proofModal.classList.remove("hidden");
+      return;
     }
 
     if (status) {
