@@ -628,7 +628,11 @@ app.get("/api/admin/me", requireAdmin, asyncRoute(async (req, res) => {
 // ADMIN ORDERS
 app.get("/api/admin/orders", requireAdmin, asyncRoute(async (_req, res) => {
   const result = await db.execute(`
-    SELECT * FROM orders
+    SELECT
+      id, transaction_id, menu_type, username,
+      devices, days, amount_cents, reference_number,
+      proof_filename, status, created_at, reviewed_at, paid_at
+    FROM orders
     ORDER BY datetime(created_at) DESC
   `);
 
