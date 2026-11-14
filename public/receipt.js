@@ -5,7 +5,7 @@
   const FONT = '"Segoe UI","Helvetica Neue",Roboto,Arial,sans-serif';
   const MONO = '"SF Mono",Consolas,Menlo,"Courier New",monospace';
   const C = { bg: "#eceef1", paper: "#ffffff", ink: "#14171c", muted: "#6b7280", line: "#e5e7eb",
-    red: "#e0253a", green: "#15803d", greenBg: "#e6f7ed" };
+    red: "#e0253a", green: "#15803d", greenBg: "#e6f7ed", blue: "#1d4ed8", blueBg: "#e8f0ff" };
 
   let logoPromise = null;
   function loadLogo() {
@@ -82,19 +82,18 @@
     spaced(ctx, "0px");
     ctx.restore();
 
-    // ---- title, PAID badge, amount ----
+    // ---- title, SUBMITTED badge, amount ----
     let y = cy + hh + 10 + 84;
     ctx.textAlign = "center"; ctx.fillStyle = C.ink; ctx.font = `800 52px ${FONT}`; spaced(ctx, "4px");
-    ctx.fillText("PAYMENT RECEIPT", mid, y); spaced(ctx, "0px");
+    ctx.fillText("ORDER SUBMISSION RECEIPT", mid, y); spaced(ctx, "0px");
     y += 40;
-    const pw = 230, ph = 62; ctx.fillStyle = C.greenBg; rr(ctx, mid - pw / 2, y, pw, ph, ph / 2); ctx.fill();
-    ctx.strokeStyle = C.green; ctx.lineWidth = 5; ctx.lineCap = "round"; ctx.lineJoin = "round";
-    ctx.beginPath(); ctx.moveTo(mid - 80, y + 32); ctx.lineTo(mid - 68, y + 44); ctx.lineTo(mid - 46, y + 20); ctx.stroke();
-    ctx.fillStyle = C.green; ctx.font = `800 32px ${FONT}`; ctx.textAlign = "left"; spaced(ctx, "3px");
-    ctx.fillText(String(d.status || "PAID").toUpperCase(), mid - 28, y + 43); spaced(ctx, "0px");
+    const pw = 300, ph = 62; ctx.fillStyle = C.blueBg; rr(ctx, mid - pw / 2, y, pw, ph, ph / 2); ctx.fill();
+    ctx.strokeStyle = C.blue; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(mid - 105, y + 31, 13, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = C.blue; ctx.font = `800 32px ${FONT}`; ctx.textAlign = "left"; spaced(ctx, "3px");
+    ctx.fillText("SUBMITTED", mid - 75, y + 43); spaced(ctx, "0px");
     y += ph + 58;
     ctx.textAlign = "center"; ctx.fillStyle = C.muted; ctx.font = `700 22px ${FONT}`; spaced(ctx, "3px");
-    ctx.fillText("TOTAL AMOUNT PAID", mid, y); spaced(ctx, "0px");
+    ctx.fillText("ORDER AMOUNT", mid, y); spaced(ctx, "0px");
     y += 84; ctx.fillStyle = C.ink; ctx.font = `900 84px ${FONT}`; ctx.fillText(money(d.amount), mid, y);
     y += 50;
 
@@ -107,8 +106,8 @@
       ["QUANTITY", String(d.quantity)],
       ["PAYMENT METHOD", d.paymentMethod],
       ["REFERENCE NO.", d.referenceNumber || "Not provided"],
-      ["PAYMENT DATE & TIME", fmtDate(d.paidAt)],
-      ["PAYMENT STATUS", String(d.status || "PAID").toUpperCase(), { green: true }],
+      ["SUBMITTED DATE & TIME", fmtDate(d.submittedAt || d.issuedAt)],
+      ["PAYMENT STATUS", String(d.paymentStatus || "NOT VERIFIED").toUpperCase()],
       ["RECEIPT ISSUED", fmtDate(d.issuedAt)]
     ];
     const left = cx + pad, right = cx + cw - pad, labelW = 300, valW = right - left - labelW - 20, lh = 38;
@@ -128,7 +127,7 @@
     // ---- footer ----
     y += 50; ctx.textAlign = "center";
     ctx.fillStyle = C.muted; ctx.font = `500 24px ${FONT}`;
-    for (const ln of wrap(ctx, "Please send this receipt to the admin for verification and approval of your order.", cw - pad * 2)) { ctx.fillText(ln, mid, y); y += 34; }
+    for (const ln of wrap(ctx, "This confirms your order and payment proof were submitted. Payment is NOT YET VERIFIED. Please send this receipt to the admin.", cw - pad * 2)) { ctx.fillText(ln, mid, y); y += 34; }
     if (d.contactUrl) { y += 6; ctx.fillStyle = C.ink; ctx.font = `700 24px ${FONT}`; ctx.fillText("Admin: " + String(d.contactUrl).replace(/^https?:\/\//, ""), mid, y); y += 34; }
     y += 18; ctx.fillStyle = C.red; ctx.font = `800 24px ${FONT}`; spaced(ctx, "3px");
     ctx.fillText("THANK YOU FOR SHOPPING AT H2WO STORE", mid, y); spaced(ctx, "0px");

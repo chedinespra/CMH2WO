@@ -37,6 +37,10 @@
     <button type="button" id="startOrder" class="primary-btn" disabled>
       ENTER SELECTED MENU
     </button>
+
+    <button type="button" id="homeTrackOrderBtn" class="btn secondary">
+      TRACK ORDER
+    </button>
   </section>
 
   <!-- PACKAGE PAGE -->
@@ -117,17 +121,30 @@
   </section>
 
   <!-- CONFIRMATION PAGE -->
-  <section id="confirmationPage" class="panel" hidden>
+  <section id="confirmationPage" class="panel confirmation-panel" hidden>
     <h2>ORDER SUBMITTED</h2>
-    <p>Your order has been received.</p>
-    <p>Order ID:</p>
-    <strong id="confirmationOrderId"></strong>
-    <p>Status: PENDING</p>
+    <p>Your order and payment proof have been received successfully.</p>
 
-    <button type="button" id="trackOrderBtn">TRACK ORDER</button>
-    <a id="contactAdminBtn" href="#" target="_blank" rel="noopener">
-      CONTACT ADMIN
-    </a>
+    <p>YOUR ORDER ID</p>
+    <strong id="confirmationOrderId"></strong>
+
+    <p class="submission-status">SUBMITTED ? PAYMENT NOT YET VERIFIED</p>
+
+    <div class="confirmation-actions">
+      <button type="button" id="downloadReceiptBtn">DOWNLOAD RECEIPT</button>
+      <button type="button" id="copyOrderIdBtn">COPY ORDER ID</button>
+      <button type="button" id="trackOrderBtn">TRACK ORDER</button>
+      <a id="contactAdminBtn" href="#" target="_blank" rel="noopener">
+        CONTACT ADMIN
+      </a>
+    </div>
+
+    <div class="submission-instructions">
+      <h3>IMPORTANT INSTRUCTIONS</h3>
+      <p>1. Download your receipt and send it to the admin.</p>
+      <p>2. Copy your Order ID in case the admin asks for it.</p>
+      <p>3. Your payment will be verified by the admin.</p>
+    </div>
   </section>
 
   <!-- ORDER TRACKING -->

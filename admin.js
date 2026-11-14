@@ -141,7 +141,7 @@ async function loadDashboard() {
         <td>${money(order.amount)}</td>
         <td>${esc(order.referenceNumber || "\u2014")}</td>
         <td>
-          <button class="action" data-view="${esc(order.id)}">VIEW</button>
+          <button class="action" data-view="${esc(order.id)}" data-proof="${esc(order.proofUrl || "")}">VIEW</button>
         </td>
         <td>
           <span class="status ${esc(order.status)}">${esc(order.status)}</span>
@@ -191,29 +191,23 @@ $("ordersBody").addEventListener("click", async event => {
 
   try {
     if (view) {
-      const orders = await api("/api/admin/orders");
-      const order = orders.find(
-        item => String(item.id) === view.dataset.view
-      );
+      const orderId = view.dataset.view;
+      const proofUrl = view.dataset.proof;
 
-      if (!order || !order.proofUrl) {
-        toast("Payment proof not found.");
+      if (!proofUrl) {
+        toast("Payment proof URL missing.");
         return;
       }
 
       const proofImage = $("proofImage");
       const proofModal = $("proofModal");
 
-      proofImage.onload = () => {
-        toast("Payment proof loaded.");
-      };
+      proofImage.onload = () => toast("Payment proof loaded.");
+      proofImage.onerror = () => toast("Unable to load payment proof.");
 
-      proofImage.onerror = () => {
-        toast("Unable to load payment proof.");
-      };
-
-      proofImage.src = order.proofUrl;
+      proofImage.removeAttribute("src");
       proofModal.classList.remove("hidden");
+      proofImage.src = proofUrl;
       return;
     }
 
@@ -340,6 +334,24 @@ $("logout").addEventListener("click", async () => {
   } catch (err) {
     toast(err.message);
   }
+});
+
+// ADMIN PANEL TOGGLES
+$("toggleSettings").addEventListener("click", () => {
+  $("settingsPanel").hidden = false;
+  $("passwordPanel").hidden = true;
+});
+
+$("togglePassword").addEventListener("click", () => {
+  $("passwordPanel").hidden = false;
+  $("settingsPanel").hidden = true;
+});
+
+document.querySelectorAll(".close-settings").forEach(button => {
+  button.addEventListener("click", () => {
+    $("settingsPanel").hidden = true;
+    $("passwordPanel").hidden = true;
+  });
 });
 
 // INITIAL CHECK

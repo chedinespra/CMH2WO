@@ -77,10 +77,10 @@
       <section class="panel">
         <div class="section-head">
           <div>
-            <span class="step">CUSTOMER SUBMISSIONS</span>
+            <span class="step">ORDER MANAGEMENT</span>
             <h2>Payment orders</h2>
           </div>
-          <button class="btn small secondary" id="refresh">↻ REFRESH</button>
+          <button type="button" class="btn small secondary" id="refresh">&#8635; REFRESH</button>
         </div>
 
         <div class="table-wrap">
@@ -98,18 +98,24 @@
               </tr>
             </thead>
             <tbody id="ordersBody">
-              <tr><td colspan="8" class="empty">Loading orders…</td></tr>
+              <tr><td colspan="8" class="empty">Loading orders...</td></tr>
             </tbody>
           </table>
         </div>
       </section>
 
-      <section class="panel">
+      <div class="admin-toolbar">
+        <button type="button" class="btn primary" id="toggleSettings">CHANGE SETTINGS</button>
+        <button type="button" class="btn secondary" id="togglePassword">CHANGE PASSWORD</button>
+      </div>
+
+      <section class="panel" id="settingsPanel" hidden>
         <div class="section-head">
           <div>
             <span class="step">PORTAL CONFIGURATION</span>
             <h2>Website settings</h2>
           </div>
+          <button type="button" class="btn small secondary close-settings">CLOSE</button>
         </div>
 
         <form id="settingsForm" enctype="multipart/form-data" class="settings-grid">
@@ -163,12 +169,13 @@
         </form>
       </section>
 
-      <section class="panel">
+      <section class="panel" id="passwordPanel" hidden>
         <div class="section-head">
           <div>
             <span class="step">ACCOUNT SECURITY</span>
             <h2>Change admin password</h2>
           </div>
+          <button type="button" class="btn small secondary close-settings">CLOSE</button>
         </div>
 
         <form id="passwordForm" class="settings-grid">

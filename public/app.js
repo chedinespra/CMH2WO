@@ -338,6 +338,30 @@ document.getElementById("submitBtn").addEventListener("click", async () => {
     updateDays();
     showPage(confirmationPage);
 
+    const downloadBtn = document.getElementById("downloadReceiptBtn");
+    if (downloadBtn) {
+      downloadBtn.disabled = false;
+      downloadBtn.textContent = "DOWNLOAD RECEIPT";
+    }
+
+    const copyBtn = document.getElementById("copyOrderIdBtn");
+    if (copyBtn) {
+      copyBtn.onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(currentOrderId);
+          copyBtn.textContent = "COPIED!";
+          setTimeout(() => copyBtn.textContent = "COPY ORDER ID", 1500);
+        } catch {
+          alert("Copy failed. Please copy your Order ID manually.");
+        }
+      };
+    }
+
+    if (downloadBtn) {
+      downloadBtn.onclick = () => downloadOrderReceipt(currentOrderId, downloadBtn);
+      downloadOrderReceipt(currentOrderId, downloadBtn);
+    }
+
   } catch (error) {
     result.textContent = error.message;
 
@@ -346,6 +370,38 @@ document.getElementById("submitBtn").addEventListener("click", async () => {
     button.textContent = "SUBMIT PAYMENT";
   }
 });
+
+async function downloadOrderReceipt(id, button) {
+  if (!id) return;
+
+  button.disabled = true;
+  button.textContent = "PREPARING RECEIPT...";
+
+  try {
+    const response = await fetch(
+      "/api/orders/" + encodeURIComponent(id) + "/receipt"
+    );
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Cannot generate receipt.");
+    }
+
+    if (!window.H2WOReceipt) {
+      throw new Error("Receipt generator not loaded.");
+    }
+
+    const canvas = document.createElement("canvas");
+    await window.H2WOReceipt.render(data, canvas);
+    window.H2WOReceipt.download(canvas, data);
+    button.textContent = "DOWNLOAD RECEIPT";
+  } catch (error) {
+    alert(error.message);
+    button.textContent = "TRY AGAIN";
+  } finally {
+    button.disabled = false;
+  }
+}
 
 document.getElementById("trackOrderBtn").addEventListener("click", () => {
   trackingPanel.hidden = false;
@@ -373,7 +429,6 @@ async function checkOrder(id) {
     const response = await fetch(
       "/api/orders/" + encodeURIComponent(id) + "/status"
     );
-
     const data = await response.json();
 
     if (!response.ok) {
@@ -383,54 +438,36 @@ async function checkOrder(id) {
     trackResult.replaceChildren();
 
     const statusText = document.createElement("p");
-    statusText.textContent = "Order Status: " + (data.status || "UNKNOWN");
+    statusText.textContent = "ORDER STATUS: " + (data.status || "UNKNOWN");
     trackResult.appendChild(statusText);
 
-    if (String(data.status).toUpperCase() === "APPROVED") {
-      const receiptButton = document.createElement("button");
-      receiptButton.type = "button";
-      receiptButton.textContent = "DOWNLOAD RECEIPT";
-      trackResult.appendChild(receiptButton);
+    const paymentText = document.createElement("p");
+    paymentText.textContent = data.paid
+      ? "PAYMENT STATUS: VERIFIED"
+      : "PAYMENT STATUS: NOT YET VERIFIED";
+    trackResult.appendChild(paymentText);
 
-      receiptButton.addEventListener("click", async () => {
-        receiptButton.disabled = true;
-        receiptButton.textContent = "PREPARING RECEIPT...";
+    const receiptButton = document.createElement("button");
+    receiptButton.type = "button";
+    receiptButton.textContent = "DOWNLOAD RECEIPT";
+    trackResult.appendChild(receiptButton);
 
-        try {
-          const receiptResponse = await fetch(
-            "/api/orders/" + encodeURIComponent(id) + "/receipt"
-          );
-
-          const receiptData = await receiptResponse.json();
-
-          if (!receiptResponse.ok) {
-            throw new Error(receiptData.error || "Cannot generate receipt.");
-          }
-
-          if (!window.H2WOReceipt) {
-            throw new Error("Receipt generator not loaded.");
-          }
-
-          const canvas = document.createElement("canvas");
-          await window.H2WOReceipt.render(receiptData, canvas);
-          window.H2WOReceipt.download(canvas, receiptData);
-
-          receiptButton.textContent = "DOWNLOAD RECEIPT";
-
-        } catch (error) {
-          alert(error.message);
-          receiptButton.textContent = "TRY AGAIN";
-
-        } finally {
-          receiptButton.disabled = false;
-        }
-      });
-    }
+    receiptButton.addEventListener("click", () => {
+      downloadOrderReceipt(id, receiptButton);
+    });
 
   } catch (error) {
     trackResult.textContent = error.message;
   }
 }
+
+document.getElementById("homeTrackOrderBtn").addEventListener("click", () => {
+  showPage(homePage);
+  trackingPanel.hidden = false;
+  trackId.value = "";
+  trackResult.textContent = "";
+  trackingPanel.scrollIntoView({ behavior: "smooth", block: "center" });
+});
 
 document.getElementById("trackBtn").addEventListener("click", () => {
   checkOrder(trackId.value.trim());

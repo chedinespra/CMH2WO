@@ -134,11 +134,18 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 async function findOrder(id) {
-  if (!UUID_RE.test(String(id))) return null;
+  const value = String(id || "").trim();
+
+  const isUUID = UUID_RE.test(value);
+  const isTransactionId = /^H2WO-[A-Z0-9-]{8,40}$/i.test(value);
+
+  if (!isUUID && !isTransactionId) return null;
 
   const result = await db.execute({
-    sql: "SELECT * FROM orders WHERE id=?",
-    args: [String(id)]
+    sql: `SELECT * FROM orders
+          WHERE id = ? OR transaction_id = ?
+          LIMIT 1`,
+    args: [value, value]
   });
 
   return result.rows[0] || null;
@@ -494,41 +501,42 @@ app.get("/api/orders/:id/status", statusLimiter, asyncRoute(async (req, res) => 
   res.json({
     status: order.status,
     paid: order.status === "APPROVED" && !!order.paid_at,
-    transactionId: order.transaction_id
+    transactionId: order.transaction_id,
+    createdAt: order.created_at,
+    menuType: order.menu_type || "SHADOW",
+    days: Number(order.days),
+    devices: Number(order.devices || 1),
+    amount: (Number(order.amount_cents) / 100).toFixed(2)
   });
 }));
 
-// CUSTOMER RECEIPT
+// CUSTOMER SUBMISSION RECEIPT
 app.get("/api/orders/:id/receipt", statusLimiter, asyncRoute(async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
   const order = await findOrder(req.params.id);
 
   if (!order) return res.status(404).json({ error: "Order not found." });
 
-  if (order.status !== "APPROVED" || !order.paid_at) {
-    return res.status(403).json({
-      error: "Receipt is available only after payment verification.",
-      status: order.status
-    });
-  }
-
   const settings = await getSettings();
+  const menuType = order.menu_type || "SHADOW";
 
   res.json({
     storeName: settings.siteName || "H2WO STORE",
     transactionId: order.transaction_id,
     customerName: order.username,
     account: order.username,
-    productName: `${order.menu_type || "SHADOW"} MENU - ${order.days} Day${order.days === 1 ? "" : "s"}`,
+    productName: menuType + " MENU - " + order.days + " Day" + (Number(order.days) === 1 ? "" : "s"),
     devices: Number(order.devices || 1),
     quantity: Number(order.devices || 1),
     amount: (Number(order.amount_cents) / 100).toFixed(2),
     currency: "PHP",
     paymentMethod: order.payment_method || "GCash",
     referenceNumber: order.reference_number || "",
-    paidAt: toIso(order.paid_at),
+    paidAt: order.paid_at ? toIso(order.paid_at) : null,
+    submittedAt: toIso(order.created_at),
     issuedAt: new Date().toISOString(),
-    status: "PAID",
+    status: "SUBMITTED",
+    paymentStatus: order.paid_at ? "VERIFIED" : "NOT VERIFIED",
     contactUrl: settings.contactUrl || ""
   });
 }));
@@ -732,10 +740,14 @@ app.get("/api/admin/proofs/:filename", requireAdmin, asyncRoute(async (req, res)
 
   const order = result.rows[0];
 
-  if (order.proof_data && order.proof_data.length > 0) {
-    res.setHeader("Cache-Control", "no-store");
-    res.setHeader("Content-Type", order.proof_mime || "image/jpeg");
-    return res.send(Buffer.from(order.proof_data));
+  if (order.proof_data != null) {
+    const proofBuffer = Buffer.from(order.proof_data);
+
+    if (proofBuffer.length > 0) {
+      res.setHeader("Cache-Control", "no-store");
+      res.setHeader("Content-Type", order.proof_mime || "image/jpeg");
+      return res.send(proofBuffer);
+    }
   }
 
   const fullPath = path.join(UPLOAD_DIR, filename);
