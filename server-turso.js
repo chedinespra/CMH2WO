@@ -345,16 +345,8 @@ const statusLimiter = rateLimit({
 });
 
 // FILE UPLOAD
-const storage = multer.diskStorage({
-  destination: (_req, _file, callback) => callback(null, UPLOAD_DIR),
-  filename: (_req, file, callback) => {
-    const ext = file.mimetype === "image/png" ? ".png" : ".jpg";
-    callback(null, `${crypto.randomUUID()}${ext}`);
-  }
-});
-
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024, files: 1 },
   fileFilter: (_req, file, callback) => {
     if (!["image/jpeg", "image/png"].includes(file.mimetype)) {
@@ -379,8 +371,14 @@ const proofUpload = multer({
 app.get("/api/public", asyncRoute(async (_req, res) => {
   const settings = await getSettings();
 
-  const qrExists = !!settings.qrFilename &&
+  const qrResult = await db.execute(
+    "SELECT id FROM qr_images WHERE id = 'gcash'"
+  );
+
+  const legacyQrExists = !!settings.qrFilename &&
     fs.existsSync(path.join(UPLOAD_DIR, path.basename(settings.qrFilename)));
+
+  const qrExists = qrResult.rows.length > 0 || legacyQrExists;
 
   res.setHeader("Cache-Control", "no-store");
   res.json({
@@ -543,8 +541,18 @@ app.get("/api/orders/:id/receipt", statusLimiter, asyncRoute(async (req, res) =>
 
 // GCASH QR IMAGE
 app.get("/api/qr", asyncRoute(async (_req, res) => {
-  const settings = await getSettings();
+  const result = await db.execute({
+    sql: "SELECT image_data, image_mime FROM qr_images WHERE id = ?",
+    args: ["gcash"]
+  });
 
+  if (result.rows.length > 0 && result.rows[0].image_data) {
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Content-Type", result.rows[0].image_mime || "image/jpeg");
+    return res.send(Buffer.from(result.rows[0].image_data));
+  }
+
+  const settings = await getSettings();
   if (!settings.qrFilename) return res.status(404).end();
 
   const filename = path.basename(settings.qrFilename);
@@ -894,12 +902,9 @@ app.post(
       for (const key of ["price1", "price7", "price30"]) {
         if (body[key] !== undefined) {
           const price = Number(body[key]);
-
           if (!Number.isFinite(price) || price < 1 || price > 1000000) {
-            if (req.file) safeDelete(req.file.filename);
             return res.status(400).json({ error: `Invalid ${key}.` });
           }
-
           updates[key] = String(Math.round(price));
         }
       }
@@ -907,26 +912,21 @@ app.post(
       for (const key of ["contactUrl", "telegramUrl", "tiktokUrl"]) {
         if (body[key] !== undefined) {
           const value = String(body[key]).trim().slice(0, 500);
-
           if (value && !/^https:\/\/[^\s]+$/i.test(value)) {
-            if (req.file) safeDelete(req.file.filename);
             return res.status(400).json({
               error: `${key} must be a valid HTTPS URL.`
             });
           }
-
           updates[key] = value;
         }
       }
 
-      const oldSettings = await getSettings();
-
       if (req.file) {
-        updates.qrFilename = req.file.filename;
+        const ext = req.file.mimetype === "image/png" ? ".png" : ".jpg";
+        updates.qrFilename = `${crypto.randomUUID()}${ext}`;
       }
 
       const tx = await db.transaction("write");
-
       try {
         for (const [key, value] of Object.entries(updates)) {
           await tx.execute({
@@ -937,18 +937,22 @@ app.post(
           });
         }
 
+        if (req.file) {
+          await tx.execute({
+            sql: `INSERT INTO qr_images(id,image_data,image_mime,updated_at)
+                  VALUES(?,?,?,CURRENT_TIMESTAMP)
+                  ON CONFLICT(id) DO UPDATE SET
+                    image_data=excluded.image_data,
+                    image_mime=excluded.image_mime,
+                    updated_at=CURRENT_TIMESTAMP`,
+            args: ["gcash", req.file.buffer, req.file.mimetype]
+          });
+        }
+
         await tx.commit();
       } catch (error) {
         await tx.rollback();
         throw error;
-      }
-
-      if (
-        req.file &&
-        oldSettings.qrFilename &&
-        oldSettings.qrFilename !== req.file.filename
-      ) {
-        safeDelete(oldSettings.qrFilename);
       }
 
       res.json({
@@ -956,7 +960,6 @@ app.post(
         settings: await getSettings()
       });
     } catch (error) {
-      if (req.file) safeDelete(req.file.filename);
       console.error("Settings update error:", error);
       res.status(500).json({ error: "Could not save settings." });
     }
@@ -1083,6 +1086,15 @@ async function startServer() {
       await db.execute("ALTER TABLE orders ADD COLUMN proof_mime TEXT");
       console.log("Added proof_mime column.");
     }
+
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS qr_images (
+        id TEXT PRIMARY KEY,
+        image_data BLOB NOT NULL,
+        image_mime TEXT NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
 
     await db.execute(`
       CREATE TABLE IF NOT EXISTS sessions (
