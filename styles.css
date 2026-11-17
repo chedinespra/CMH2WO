@@ -13,3 +13,155 @@
 .btn.block{width:100%;margin-top:12px}
 .btn.tg{background:#0088cc;color:#fff;box-shadow:0 0 12px #0088cc66}
 .receipt-preview{display:block;width:100%;height:auto;margin:18px 0 6px;border-radius:10px;border:1px solid #2a2a2a}
+
+
+/* =========================================================
+   H2WO ADMIN — REFINED PREMIUM THEME + MOTION
+   CSS-only layer; authentication and dashboard logic unchanged.
+   ========================================================= */
+:root {
+  --red: #ef2635;
+  --red2: #ff5965;
+  --blue: #238bff;
+  --line: #2b323e;
+  --panel: #141922;
+  --panel2: #1a202b;
+  --text: #f4f6fa;
+  --muted: #9ba4b1;
+}
+html { scroll-behavior: smooth; }
+body {
+  background:
+    radial-gradient(ellipse at 10% 0%,rgba(35,139,255,.09),transparent 34%),
+    radial-gradient(ellipse at 90% 0%,rgba(239,38,53,.12),transparent 38%),
+    #080a0e;
+  background-attachment: fixed;
+}
+body:before { opacity: .11; background-size: 48px 48px; }
+.ambient {
+  background: radial-gradient(circle,rgba(35,139,255,.12),transparent 68%);
+  animation: h2wo-ambient 9s ease-in-out infinite alternate;
+}
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  backdrop-filter: blur(16px);
+  background: rgba(9,11,15,.88);
+  border-bottom-color: rgba(255,255,255,.09);
+}
+.brand { transition: opacity .2s ease; }
+.brand:hover { opacity: .8; }
+.shell { animation: h2wo-admin-enter .55s cubic-bezier(.2,.75,.25,1) both; }
+.panel {
+  background:
+    radial-gradient(ellipse at 100% 0%,rgba(35,139,255,.055),transparent 44%),
+    linear-gradient(145deg,#171d27,#0f131a);
+  border-color: #2b3442;
+  box-shadow: 0 20px 55px rgba(0,0,0,.32);
+  transition: border-color .25s ease, box-shadow .25s ease, transform .25s ease;
+}
+.panel:hover { border-color: #39475a; }
+.admin-welcome {
+  background:
+    radial-gradient(ellipse at 100% 0%,rgba(35,139,255,.12),transparent 48%),
+    linear-gradient(120deg,#211217,#11151d 70%);
+  border-color: #333b49;
+  box-shadow: 0 16px 42px rgba(0,0,0,.25);
+}
+.admin-welcome h1 span {
+  background: linear-gradient(100deg,#ff4656,#ff7380 48%,#61adff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.tag {
+  border-color: #65303a;
+  background: rgba(239,38,53,.07);
+}
+.stat {
+  transition: transform .22s ease,border-color .22s ease,box-shadow .22s ease;
+}
+.stat:hover {
+  transform: translateY(-3px);
+  border-color: #47566b;
+  box-shadow: 0 12px 28px rgba(0,0,0,.24);
+}
+input,select,textarea {
+  transition: border-color .2s ease,box-shadow .2s ease,background .2s ease;
+}
+input:focus,select:focus,textarea:focus {
+  border-color: var(--blue) !important;
+  box-shadow: 0 0 0 3px rgba(35,139,255,.14) !important;
+}
+.btn,.admin-toolbar button,button {
+  transition: transform .2s ease,filter .2s ease,background .2s ease,
+    border-color .2s ease,box-shadow .2s ease;
+}
+.btn:hover:not(:disabled),.admin-toolbar button:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+.btn:active:not(:disabled),button:active:not(:disabled) { transform: scale(.985); }
+.btn.primary,.admin-toolbar button:not(#togglePassword) {
+  background: linear-gradient(110deg,#b20d1b,#ef2635 62%,#d51c46);
+  box-shadow: 0 7px 22px rgba(239,38,53,.14);
+}
+.btn.primary:hover,.admin-toolbar button:not(#togglePassword):hover {
+  filter: brightness(1.12);
+  box-shadow: 0 10px 26px rgba(239,38,53,.22);
+}
+.btn.secondary,.admin-toolbar #togglePassword {
+  background: #171e29;
+  border-color: #354357;
+}
+.btn.secondary:hover,.admin-toolbar #togglePassword:hover {
+  border-color: var(--blue);
+  color: #8bc4ff;
+  background: #192638;
+}
+table { border-color: #303947; }
+th {
+  background: #1b2431;
+  color: #e8edf5;
+}
+td { border-color: #2b3441; }
+tbody tr { transition: background .18s ease; }
+tbody tr:hover { background: rgba(35,139,255,.055); }
+.modal { backdrop-filter: blur(8px); }
+.modal-card {
+  background: linear-gradient(145deg,#171d27,#0d1118);
+  border-color: #354050;
+  box-shadow: 0 24px 80px rgba(0,0,0,.65);
+}
+button:focus-visible,a:focus-visible {
+  outline: 2px solid #55a8ff;
+  outline-offset: 3px;
+}
+@keyframes h2wo-admin-enter {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes h2wo-ambient {
+  from { transform: translateY(0) scale(1); opacity: .75; }
+  to { transform: translateY(24px) scale(1.08); opacity: 1; }
+}
+@media (max-width: 850px) {
+  #adminContent .stats { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  #adminContent .stat:last-child { grid-column: 1 / -1; }
+}
+@media (max-width: 520px) {
+  .topbar { padding-inline: 15px; }
+  .admin-welcome { padding: 20px 16px; }
+  #adminContent { width: 100%; padding: 18px 0 40px; }
+  #adminContent .stats { gap: 9px; }
+  #adminContent .stat { padding: 15px 12px; }
+  #adminContent .panel { padding: 17px 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,*::before,*::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
